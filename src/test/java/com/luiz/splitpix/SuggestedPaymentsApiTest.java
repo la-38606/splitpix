@@ -1,12 +1,14 @@
 package com.luiz.splitpix;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.HashMap;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 import tools.jackson.databind.JsonNode;
 
 class SuggestedPaymentsApiTest extends ApiTestSupport {
@@ -51,12 +53,20 @@ class SuggestedPaymentsApiTest extends ApiTestSupport {
 		JsonNode payments = body.get("payments");
 		assertThat(payments.size()).isEqualTo(4);
 
+		Map<String, String> nameById = new HashMap<>();
+		nameById.put(ids.get("Ana"), "Ana");
+		nameById.put(ids.get("Bruno"), "Bruno");
+		nameById.put(ids.get("Clara"), "Clara");
+		nameById.put(ids.get("Diego"), "Diego");
+
 		Map<String, Long> amountByPayer = new HashMap<>();
 		long total = 0;
 		for (JsonNode payment : payments) {
 			assertThat(payment.get("recipientParticipantId").asText()).isEqualTo(luizId);
 			assertThat(payment.get("recipientName").asText()).isEqualTo("Luiz");
 			assertThat(payment.get("recipientPixKey").asText()).isEqualTo("luiz@example.com");
+			assertThat(payment.get("payerName").asText())
+					.isEqualTo(nameById.get(payment.get("payerParticipantId").asText()));
 			assertThat(payment.get("amountCents").asLong()).isPositive();
 			amountByPayer.put(payment.get("payerParticipantId").asText(), payment.get("amountCents").asLong());
 			total += payment.get("amountCents").asLong();
@@ -91,9 +101,12 @@ class SuggestedPaymentsApiTest extends ApiTestSupport {
 
 		getSuggestedPayments(groupId, token)
 				.andExpect(status().isOk())
+				.andExpect(content().contentType(MediaType.APPLICATION_JSON))
 				.andExpect(jsonPath("$.payments.length()").value(1))
 				.andExpect(jsonPath("$.payments[0].payerParticipantId").value(anaId))
-				.andExpect(jsonPath("$.payments[0].amountCents").value(5000));
+				.andExpect(jsonPath("$.payments[0].amountCents").value(5000))
+				// The recipient has no Pix key: the field is present and null.
+				.andExpect(jsonPath("$.payments[0].recipientPixKey").value((Object) null));
 
 		// Completing the suggestion regenerates from current state (doc 12.6).
 		postSettlement(groupId, token, "s1", settlementJson(anaId, luizId, 5000))

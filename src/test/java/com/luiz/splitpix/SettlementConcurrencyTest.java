@@ -64,6 +64,12 @@ class SettlementConcurrencyTest extends ApiTestSupport {
 		}
 	}
 
+	/**
+	 * Doc-fidelity test: reproduces 18.4's exact fixture and outcomes. Note the
+	 * Alice→Carol request is statically invalid (Carol is owed only 2000), so
+	 * this pins the doc's expected statuses, not the lock — the lock is pinned
+	 * by the two genuinely racing tests below.
+	 */
 	@Test
 	void criticalConcurrencyTest_18_4() throws Exception {
 		Group18_4 g = setUp18_4();
@@ -96,6 +102,58 @@ class SettlementConcurrencyTest extends ApiTestSupport {
 		assertThat(balances.get(g.alice())).isEqualTo(-2000L);
 		assertThat(balances.get(g.bob())).isZero();
 		assertThat(balances.get(g.carol())).isEqualTo(2000L);
+		assertThat(balances.values().stream().mapToLong(Long::longValue).sum()).isZero();
+	}
+
+	@Test
+	void concurrentIndividuallyValidSettlements_cannotJointlyOverSettle() throws Exception {
+		// Unlike 18.4 (where one request is statically invalid), BOTH requests
+		// here are valid in isolation — only the group lock prevents the pair
+		// from jointly flipping Alice to creditor. This is the test that fails
+		// if the lock is removed.
+		JsonNode group = createGroup("Race", "Alice");
+		String groupId = group.get("groupId").asText();
+		String token = group.get("inviteToken").asText();
+		String alice = group.get("creatorParticipantId").asText();
+		String dave = addParticipant(groupId, token, "Dave").get("participantId").asText();
+		String bob = addParticipant(groupId, token, "Bob").get("participantId").asText();
+		String carol = addParticipant(groupId, token, "Carol").get("participantId").asText();
+
+		// Alice -8000, Dave -2000, Bob +5000, Carol +5000.
+		postExpense(groupId, token, "e-bob", """
+				{"description": "Mercado", "paidByParticipantId": "%s", "totalCents": 5000,
+				 "shares": [{"participantId": "%s", "amountCents": 5000}]}
+				""".formatted(bob, alice)).andExpect(status().isCreated());
+		postExpense(groupId, token, "e-carol", """
+				{"description": "Uber", "paidByParticipantId": "%s", "totalCents": 5000,
+				 "shares": [
+				   {"participantId": "%s", "amountCents": 3000},
+				   {"participantId": "%s", "amountCents": 2000}
+				 ]}
+				""".formatted(carol, alice, dave)).andExpect(status().isCreated());
+
+		CyclicBarrier barrier = new CyclicBarrier(2);
+		Callable<Integer> aliceToBob = () -> {
+			barrier.await();
+			return postSettlement(groupId, token, "j-ab", settlementJson(alice, bob, 5000))
+					.andReturn().getResponse().getStatus();
+		};
+		Callable<Integer> aliceToCarol = () -> {
+			barrier.await();
+			return postSettlement(groupId, token, "j-ac", settlementJson(alice, carol, 5000))
+					.andReturn().getResponse().getStatus();
+		};
+
+		List<Integer> statuses = runConcurrently(aliceToBob, aliceToCarol);
+		assertThat(statuses).containsExactlyInAnyOrder(201, 409);
+
+		Integer rows = jdbcTemplate.queryForObject(
+				"SELECT COUNT(*) FROM settlements WHERE group_id = ?::uuid", Integer.class, groupId);
+		assertThat(rows).isEqualTo(1);
+
+		Map<String, Long> balances = balances(groupId, token);
+		// Alice paid exactly one 5000: -8000 + 5000 = -3000, never a creditor.
+		assertThat(balances.get(alice)).isEqualTo(-3000L);
 		assertThat(balances.values().stream().mapToLong(Long::longValue).sum()).isZero();
 	}
 

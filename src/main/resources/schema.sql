@@ -50,7 +50,11 @@ CREATE TABLE IF NOT EXISTS expenses (
     description VARCHAR(200) NOT NULL,
     total_cents BIGINT NOT NULL,
     idempotency_key VARCHAR(120) NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- clock_timestamp(), not NOW(): NOW() freezes at transaction start, but writes
+    -- serialize on the group lock acquired later, so NOW() can invert the causal
+    -- order in the activity feed. Inserts run under the lock, so insert-time
+    -- timestamps match the serialization order.
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
 
     CONSTRAINT payer_belongs_to_group FOREIGN KEY (group_id, paid_by_participant_id)
         REFERENCES participants (group_id, id),
@@ -82,7 +86,8 @@ CREATE TABLE IF NOT EXISTS settlements (
     amount_cents BIGINT NOT NULL,
     idempotency_key VARCHAR(120) NOT NULL,
     status VARCHAR(20) NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- clock_timestamp() for the same reason as expenses.created_at.
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
 
     CONSTRAINT settlement_payer_in_group FOREIGN KEY (group_id, payer_participant_id)
         REFERENCES participants (group_id, id),

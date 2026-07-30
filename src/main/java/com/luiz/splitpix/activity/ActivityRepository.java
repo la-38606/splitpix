@@ -41,7 +41,7 @@ public class ActivityRepository {
 				           s.payer_participant_id, s.recipient_participant_id,
 				           s.amount_cents, s.created_at
 				    FROM settlements s
-				    WHERE s.group_id = ?
+				    WHERE s.group_id = ? AND s.status = 'COMPLETED'
 				) history
 				ORDER BY created_at, id
 				""", MAPPER, groupId, groupId);

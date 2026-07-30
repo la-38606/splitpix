@@ -57,6 +57,26 @@ class DebtSimplifierTest {
 	}
 
 	@Test
+	void equalInputs_produceIdenticalTransferLists() {
+		// Determinism: equal-magnitude ties are broken by participant id, so the
+		// same balances always yield the same ordered plan (stable UI, stable tests).
+		UUID creditor = UUID.randomUUID();
+		List<ParticipantBalance> balances = List.of(
+				balance(creditor, 9000),
+				balance(UUID.randomUUID(), -3000),
+				balance(UUID.randomUUID(), -3000),
+				balance(UUID.randomUUID(), -3000));
+
+		List<Transfer> first = DebtSimplifier.simplify(balances);
+		List<Transfer> second = DebtSimplifier.simplify(balances);
+		assertThat(first).containsExactlyElementsOf(second);
+
+		List<String> payerOrder = first.stream()
+				.map(t -> t.payerParticipantId().toString()).toList();
+		assertThat(payerOrder).isSorted();
+	}
+
+	@Test
 	void nonZeroSum_isRejected() {
 		assertThatThrownBy(() -> DebtSimplifier.simplify(List.of(balance(UUID.randomUUID(), 1))))
 				.isInstanceOf(IllegalArgumentException.class);

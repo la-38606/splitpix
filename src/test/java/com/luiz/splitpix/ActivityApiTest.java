@@ -46,6 +46,37 @@ class ActivityApiTest extends ApiTestSupport {
 	}
 
 	@Test
+	void itemsInterleaveByCreationTime_notByType() throws Exception {
+		// Kills an ORDER BY regression: without it, the UNION branch order
+		// would group all expenses before all settlements.
+		JsonNode group = createGroup("Ordem", "Luiz");
+		String groupId = group.get("groupId").asText();
+		String token = group.get("inviteToken").asText();
+		String luizId = group.get("creatorParticipantId").asText();
+		String anaId = addParticipant(groupId, token, "Ana").get("participantId").asText();
+
+		postExpense(groupId, token, "e1", """
+				{"description": "Primeira", "paidByParticipantId": "%s", "totalCents": 4000,
+				 "shares": [{"participantId": "%s", "amountCents": 4000}]}
+				""".formatted(luizId, anaId)).andExpect(status().isCreated());
+		postSettlement(groupId, token, "s1", settlementJson(anaId, luizId, 4000))
+				.andExpect(status().isCreated());
+		postExpense(groupId, token, "e2", """
+				{"description": "Segunda", "paidByParticipantId": "%s", "totalCents": 2000,
+				 "shares": [{"participantId": "%s", "amountCents": 2000}]}
+				""".formatted(luizId, anaId)).andExpect(status().isCreated());
+
+		getActivity(groupId, token)
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.items.length()").value(3))
+				.andExpect(jsonPath("$.items[0].type").value("EXPENSE"))
+				.andExpect(jsonPath("$.items[0].description").value("Primeira"))
+				.andExpect(jsonPath("$.items[1].type").value("SETTLEMENT"))
+				.andExpect(jsonPath("$.items[2].type").value("EXPENSE"))
+				.andExpect(jsonPath("$.items[2].description").value("Segunda"));
+	}
+
+	@Test
 	void emptyGroup_hasEmptyActivity() throws Exception {
 		JsonNode group = createGroup();
 		getActivity(group.get("groupId").asText(), group.get("inviteToken").asText())

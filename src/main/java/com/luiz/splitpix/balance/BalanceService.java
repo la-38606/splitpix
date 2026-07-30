@@ -2,11 +2,12 @@ package com.luiz.splitpix.balance;
 
 import com.luiz.splitpix.group.GroupService;
 import com.luiz.splitpix.participant.Participant;
+import com.luiz.splitpix.participant.ParticipantRepository;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
-import com.luiz.splitpix.participant.ParticipantRepository;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,15 +35,22 @@ public class BalanceService {
 	@Transactional(readOnly = true)
 	public List<SuggestedPayment> getSuggestedPayments(UUID groupId, String inviteToken) {
 		groupService.requireGroup(groupId, inviteToken);
-		Map<UUID, Participant> participants = participantRepository.findByGroupId(groupId).stream()
-				.collect(java.util.stream.Collectors.toMap(Participant::id, Function.identity()));
-		return DebtSimplifier.simplify(balanceRepository.computeBalances(groupId)).stream()
+		List<ParticipantBalance> balances = balanceRepository.computeBalances(groupId);
+		// Names come from the balances themselves — one snapshot, no lookup that
+		// can miss a participant added between two statements. The Pix-key map
+		// is a separate read; a miss degrades to a null key, never an error.
+		Map<UUID, ParticipantBalance> byId = balances.stream()
+				.collect(Collectors.toMap(ParticipantBalance::participantId, Function.identity()));
+		Map<UUID, String> pixKeys = participantRepository.findByGroupId(groupId).stream()
+				.filter(p -> p.pixKeyValue() != null)
+				.collect(Collectors.toMap(Participant::id, Participant::pixKeyValue));
+		return DebtSimplifier.simplify(balances).stream()
 				.map(transfer -> new SuggestedPayment(
 						transfer.payerParticipantId(),
-						participants.get(transfer.payerParticipantId()).displayName(),
+						byId.get(transfer.payerParticipantId()).displayName(),
 						transfer.recipientParticipantId(),
-						participants.get(transfer.recipientParticipantId()).displayName(),
-						participants.get(transfer.recipientParticipantId()).pixKeyValue(),
+						byId.get(transfer.recipientParticipantId()).displayName(),
+						pixKeys.get(transfer.recipientParticipantId()),
 						transfer.amountCents()))
 				.toList();
 	}

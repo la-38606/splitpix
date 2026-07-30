@@ -57,6 +57,8 @@ class SettlementApiTest extends ApiTestSupport {
 				.andExpect(status().isCreated())
 				.andExpect(content().contentType(MediaType.APPLICATION_JSON))
 				.andExpect(jsonPath("$.settlementId").isNotEmpty())
+				.andExpect(jsonPath("$.payerParticipantId").value(anaId))
+				.andExpect(jsonPath("$.recipientParticipantId").value(luizId))
 				.andExpect(jsonPath("$.status").value("COMPLETED"))
 				.andExpect(jsonPath("$.amountCents").value(5000));
 
@@ -117,6 +119,62 @@ class SettlementApiTest extends ApiTestSupport {
 		postSettlement(groupId, token, "s-second", settlementJson(anaId, luizId, 1))
 				.andExpect(status().isConflict())
 				.andExpect(jsonPath("$.code").value("SETTLEMENT_EXCEEDS_DEBT"));
+	}
+
+	@Test
+	void recipientNotOwedEnough_returns409_evenWhenPayerOwesEnough() throws Exception {
+		// Isolates invariant 5: Bia's balance is zero, so she cannot receive,
+		// although Ana (payer) genuinely owes 5000.
+		String biaId = addParticipant(groupId, token, "Bia").get("participantId").asText();
+
+		postSettlement(groupId, token, "s-recipient", settlementJson(anaId, biaId, 1000))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("SETTLEMENT_EXCEEDS_DEBT"));
+	}
+
+	@Test
+	void replayWithDifferentBody_returnsOriginalSettlement() throws Exception {
+		// Section 14.2: replay returns the existing settlement; request hashing
+		// (14.3) is a stretch goal, so the second body is ignored.
+		postSettlement(groupId, token, "s-div", settlementJson(anaId, luizId, 5000))
+				.andExpect(status().isCreated());
+
+		JsonNode replay = readBody(postSettlement(groupId, token, "s-div", settlementJson(anaId, luizId, 1234))
+				.andExpect(status().isOk()));
+		assertThat(replay.get("amountCents").asLong()).isEqualTo(5000L);
+	}
+
+	@Test
+	void replayWithInvalidBody_stillReplays() throws Exception {
+		postSettlement(groupId, token, "s-inv", settlementJson(anaId, luizId, 5000))
+				.andExpect(status().isCreated());
+
+		postSettlement(groupId, token, "s-inv", settlementJson(anaId, luizId, -1))
+				.andExpect(status().isOk());
+	}
+
+	@Test
+	void amountAboveCap_returns400() throws Exception {
+		postSettlement(groupId, token, "s-cap", settlementJson(anaId, luizId, 1_000_000_000_001L))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("INVALID_SETTLEMENT_AMOUNT"));
+	}
+
+	@Test
+	void missingAmount_returns400ValidationError() throws Exception {
+		postSettlement(groupId, token, "s-noamount", """
+				{"payerParticipantId": "%s", "recipientParticipantId": "%s"}
+				""".formatted(anaId, luizId))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+	}
+
+	@Test
+	void unknownGroup_returns404() throws Exception {
+		postSettlement(java.util.UUID.randomUUID().toString(), token, "s-404",
+				settlementJson(anaId, luizId, 5000))
+				.andExpect(status().isNotFound())
+				.andExpect(jsonPath("$.code").value("GROUP_NOT_FOUND"));
 	}
 
 	@Test
