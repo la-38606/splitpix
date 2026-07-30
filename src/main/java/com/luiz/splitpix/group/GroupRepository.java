@@ -1,5 +1,6 @@
 package com.luiz.splitpix.group;
 
+import com.luiz.splitpix.common.NotFoundException;
 import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.UUID;
@@ -37,9 +38,12 @@ public class GroupRepository {
 	/**
 	 * Serializes all writes within a group (design doc 13.3). Every write path
 	 * that changes accounting state must call this inside its transaction.
+	 * Throws instead of silently degrading to a no-op lock if the row is gone.
 	 */
 	public void lockById(UUID id) {
-		jdbcTemplate.queryForList("SELECT id FROM groups WHERE id = ? FOR UPDATE", id);
+		if (jdbcTemplate.queryForList("SELECT id FROM groups WHERE id = ? FOR UPDATE", id).isEmpty()) {
+			throw new NotFoundException("GROUP_NOT_FOUND");
+		}
 	}
 
 }

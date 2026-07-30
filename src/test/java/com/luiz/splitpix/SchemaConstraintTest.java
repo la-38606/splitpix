@@ -38,6 +38,22 @@ class SchemaConstraintTest {
 		return id;
 	}
 
+	private UUID insertExpense(UUID groupId, UUID payer, long totalCents, String idempotencyKey) {
+		UUID id = UUID.randomUUID();
+		jdbcTemplate.update("""
+				INSERT INTO expenses (id, group_id, paid_by_participant_id, description, total_cents, idempotency_key)
+				VALUES (?, ?, ?, ?, ?, ?)
+				""", id, groupId, payer, "dinner", totalCents, idempotencyKey);
+		return id;
+	}
+
+	private void insertShare(UUID expenseId, UUID groupId, UUID participantId, long amountCents) {
+		jdbcTemplate.update("""
+				INSERT INTO expense_shares (expense_id, group_id, participant_id, amount_cents)
+				VALUES (?, ?, ?, ?)
+				""", expenseId, groupId, participantId, amountCents);
+	}
+
 	@Test
 	void duplicatePixKeyInGroup_isRejected() {
 		UUID groupId = insertGroup();
@@ -86,6 +102,39 @@ class SchemaConstraintTest {
 	}
 
 	@Test
+	void shareForParticipantOfAnotherGroup_isRejected() {
+		UUID groupA = insertGroup();
+		UUID groupB = insertGroup();
+		UUID payer = insertParticipant(groupA, null);
+		UUID outsider = insertParticipant(groupB, null);
+		UUID expenseId = insertExpense(groupA, payer, 100L, "k-cross");
+
+		assertThatThrownBy(() -> insertShare(expenseId, groupA, outsider, 100L))
+				.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
+	void deletingParticipantWithShares_isRejected() {
+		// The deferred participant FK: group deletion cascades cleanly, but a
+		// lone participant delete would silently break zero-sum — so it fails.
+		UUID groupId = insertGroup();
+		UUID payer = insertParticipant(groupId, null);
+		UUID expenseId = insertExpense(groupId, payer, 100L, "k-del");
+		insertShare(expenseId, groupId, payer, 100L);
+
+		assertThatThrownBy(() -> jdbcTemplate.update("DELETE FROM participants WHERE id = ?", payer))
+				.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
+	void expenseTotalAboveCap_isRejected() {
+		UUID groupId = insertGroup();
+		UUID payer = insertParticipant(groupId, null);
+		assertThatThrownBy(() -> insertExpense(groupId, payer, 1_000_000_000_001L, "k-cap"))
+				.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
 	void nonPositiveExpenseTotal_isRejected() {
 		UUID groupId = insertGroup();
 		UUID payer = insertParticipant(groupId, null);
@@ -102,17 +151,9 @@ class SchemaConstraintTest {
 		UUID payer = insertParticipant(groupId, null);
 		UUID other = insertParticipant(groupId, null);
 
-		UUID expenseId = UUID.randomUUID();
-		jdbcTemplate.update("""
-				INSERT INTO expenses (id, group_id, paid_by_participant_id, description, total_cents, idempotency_key)
-				VALUES (?, ?, ?, ?, ?, ?)
-				""", expenseId, groupId, payer, "dinner", 300L, "k3");
-		jdbcTemplate.update(
-				"INSERT INTO expense_shares (expense_id, participant_id, amount_cents) VALUES (?, ?, ?)",
-				expenseId, payer, 100L);
-		jdbcTemplate.update(
-				"INSERT INTO expense_shares (expense_id, participant_id, amount_cents) VALUES (?, ?, ?)",
-				expenseId, other, 200L);
+		UUID expenseId = insertExpense(groupId, payer, 300L, "k3");
+		insertShare(expenseId, groupId, payer, 100L);
+		insertShare(expenseId, groupId, other, 200L);
 		jdbcTemplate.update("""
 				INSERT INTO settlements (id, group_id, payer_participant_id, recipient_participant_id,
 				                         amount_cents, idempotency_key, status)

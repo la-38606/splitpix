@@ -73,6 +73,119 @@ class ExpenseApiTest extends ApiTestSupport {
 	}
 
 	@Test
+	void sameKeyDifferentBody_returnsOriginalExpense() throws Exception {
+		// Section 14.1: replay returns the already-created expense; request
+		// hashing (14.3) is a stretch goal, so the second body is ignored.
+		readBody(postExpense(groupId, token, "exp-original", expenseJson(30000, 10000, 12000, 8000))
+				.andExpect(status().isCreated()));
+
+		JsonNode replay = readBody(postExpense(groupId, token, "exp-original", expenseJson(500, 500, 0, 0))
+				.andExpect(status().isOk()));
+
+		assertThat(replay.get("totalCents").asLong()).isEqualTo(30000L);
+		assertThat(replay.get("shares").size()).isEqualTo(3);
+	}
+
+	@Test
+	void sameKeyInvalidSecondBody_stillReplays() throws Exception {
+		postExpense(groupId, token, "exp-invalid-replay", expenseJson(30000, 10000, 12000, 8000))
+				.andExpect(status().isCreated());
+
+		// Replay lookup runs before validation: an invalid retry of an already
+		// -applied request must not error.
+		postExpense(groupId, token, "exp-invalid-replay", expenseJson(-5, 0, 0, 0))
+				.andExpect(status().isOk());
+	}
+
+	@Test
+	void sameKeyInDifferentGroups_createsIndependentExpenses() throws Exception {
+		JsonNode other = createGroup("Outro", "Zé");
+		String otherGroupId = other.get("groupId").asText();
+		String otherToken = other.get("inviteToken").asText();
+		String otherCreator = other.get("creatorParticipantId").asText();
+
+		JsonNode first = readBody(postExpense(groupId, token, "shared-key", expenseJson(100, 100, 0, 0))
+				.andExpect(status().isCreated()));
+
+		JsonNode second = readBody(postExpense(otherGroupId, otherToken, "shared-key", """
+				{
+				  "description": "Outro jantar",
+				  "paidByParticipantId": "%s",
+				  "totalCents": 200,
+				  "shares": [{"participantId": "%s", "amountCents": 200}]
+				}
+				""".formatted(otherCreator, otherCreator))
+				.andExpect(status().isCreated()));
+
+		assertThat(second.get("expenseId").asText()).isNotEqualTo(first.get("expenseId").asText());
+	}
+
+	@Test
+	void overAllocatedShares_returns400() throws Exception {
+		postExpense(groupId, token, "exp-over", expenseJson(30000, 10000, 12000, 8001))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("INVALID_EXPENSE_ALLOCATION"));
+	}
+
+	@Test
+	void totalAboveCap_returns400() throws Exception {
+		postExpense(groupId, token, "exp-huge", expenseJson(Long.MAX_VALUE, Long.MAX_VALUE, 0, 0))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("INVALID_EXPENSE_TOTAL"));
+	}
+
+	@Test
+	void blankIdempotencyKey_returns400() throws Exception {
+		postExpense(groupId, token, "", expenseJson(100, 100, 0, 0))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REQUIRED"));
+	}
+
+	@Test
+	void overlongIdempotencyKey_returns400() throws Exception {
+		postExpense(groupId, token, "k".repeat(121), expenseJson(100, 100, 0, 0))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+	}
+
+	@Test
+	void malformedBodies_return400ValidationError() throws Exception {
+		String[] payloads = {
+				// null totalCents
+				"""
+				{"description": "d", "paidByParticipantId": "%s", "shares": [{"participantId": "%s", "amountCents": 1}]}
+				""".formatted(luizId, luizId),
+				// empty shares list
+				"""
+				{"description": "d", "paidByParticipantId": "%s", "totalCents": 100, "shares": []}
+				""".formatted(luizId),
+				// null share amount
+				"""
+				{"description": "d", "paidByParticipantId": "%s", "totalCents": 100, "shares": [{"participantId": "%s"}]}
+				""".formatted(luizId, luizId),
+				// over-long description
+				"""
+				{"description": "%s", "paidByParticipantId": "%s", "totalCents": 100, "shares": [{"participantId": "%s", "amountCents": 100}]}
+				""".formatted("d".repeat(201), luizId, luizId),
+		};
+		for (String payload : payloads) {
+			postExpense(groupId, token, "exp-malformed", payload)
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+		}
+	}
+
+	@Test
+	void nonBreakingSpaceDescription_returns400() throws Exception {
+		postExpense(groupId, token, "exp-nbsp", """
+				{"description": "\\u00a0", "paidByParticipantId": "%s", "totalCents": 100,
+				 "shares": [{"participantId": "%s", "amountCents": 100}]}
+				""".formatted(luizId, luizId))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+	}
+
+	@Test
 	void sharesNotSummingToTotal_returns400_andPersistsNothing() throws Exception {
 		postExpense(groupId, token, "exp-bad-sum", expenseJson(30000, 10000, 12000, 7999))
 				.andExpect(status().isBadRequest())

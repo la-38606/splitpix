@@ -76,11 +76,14 @@ class GroupApiTest extends ApiTestSupport {
 
 	@Test
 	void getGroup_unknownGroup_returns404_withPtBrMessage() throws Exception {
-		getGroup(UUID.randomUUID().toString(), "any")
+		JsonNode body = readBody(getGroup(UUID.randomUUID().toString(), "any")
 				.andExpect(status().isNotFound())
 				.andExpect(content().contentType(MediaType.APPLICATION_JSON))
-				.andExpect(jsonPath("$.code").value("GROUP_NOT_FOUND"))
-				.andExpect(jsonPath("$.message").isNotEmpty());
+				.andExpect(jsonPath("$.code").value("GROUP_NOT_FOUND")));
+		// Non-empty and no mojibake: an encoding regression turns "não" into "nÃ£o".
+		assertThat(body.get("message").asText())
+				.isNotBlank()
+				.doesNotContain("Ã", "�");
 	}
 
 	@Test

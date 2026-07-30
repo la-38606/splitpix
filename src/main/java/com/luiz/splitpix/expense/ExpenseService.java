@@ -1,10 +1,12 @@
 package com.luiz.splitpix.expense;
 
 import com.luiz.splitpix.common.BadRequestException;
+import com.luiz.splitpix.common.Texts;
 import com.luiz.splitpix.group.GroupRepository;
 import com.luiz.splitpix.group.GroupService;
 import com.luiz.splitpix.participant.Participant;
 import com.luiz.splitpix.participant.ParticipantRepository;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -15,6 +17,21 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ExpenseService {
+
+	/**
+	 * 10^12 centavos (R$ 10 bilhões). Matches the schema CHECKs; without a cap,
+	 * two Long.MAX_VALUE expenses overflow the balance aggregate and poison
+	 * every subsequent read of the group.
+	 */
+	static final long MAX_AMOUNT_CENTS = 1_000_000_000_000L;
+
+	/**
+	 * Canonical share order for responses: matches PostgreSQL's bytewise uuid
+	 * ordering (UUID.toString is lexicographically equivalent), so a 201 and
+	 * its idempotent 200 replay return byte-identical share lists.
+	 */
+	private static final Comparator<ExpenseShare> SHARE_ORDER =
+			Comparator.comparing(share -> share.participantId().toString());
 
 	private final GroupService groupService;
 	private final GroupRepository groupRepository;
@@ -46,18 +63,21 @@ public class ExpenseService {
 		var existing = expenseRepository.findByGroupIdAndIdempotencyKey(groupId, idempotencyKey);
 		if (existing.isPresent()) {
 			Expense expense = existing.get();
-			return new CreateExpenseResult(expense, expenseRepository.findShares(expense.id()), false);
+			List<ExpenseShare> shares = expenseRepository.findShares(expense.id()).stream()
+					.sorted(SHARE_ORDER).toList();
+			return new CreateExpenseResult(expense, shares, false);
 		}
 
+		String description = Texts.cleanName(request.description());
 		List<ExpenseShare> shares = validate(groupId, request);
 
 		UUID expenseId = UUID.randomUUID();
 		var createdAt = expenseRepository.insertExpense(expenseId, groupId, request.paidByParticipantId(),
-				request.description(), request.totalCents(), idempotencyKey);
-		expenseRepository.insertShares(expenseId, shares);
+				description, request.totalCents(), idempotencyKey);
+		expenseRepository.insertShares(expenseId, groupId, shares);
 
 		Expense expense = new Expense(expenseId, groupId, request.paidByParticipantId(),
-				request.description(), request.totalCents(), idempotencyKey, createdAt);
+				description, request.totalCents(), idempotencyKey, createdAt);
 		return new CreateExpenseResult(expense, shares, true);
 	}
 
@@ -71,7 +91,7 @@ public class ExpenseService {
 	}
 
 	private List<ExpenseShare> validate(UUID groupId, CreateExpenseRequest request) {
-		if (request.totalCents() <= 0) {
+		if (request.totalCents() <= 0 || request.totalCents() > MAX_AMOUNT_CENTS) {
 			throw new BadRequestException("INVALID_EXPENSE_TOTAL");
 		}
 
@@ -91,13 +111,11 @@ public class ExpenseService {
 			if (!seen.add(share.participantId())) {
 				throw new BadRequestException("DUPLICATE_SHARE_PARTICIPANT");
 			}
-			if (share.amountCents() < 0) {
+			if (share.amountCents() < 0 || share.amountCents() > MAX_AMOUNT_CENTS) {
 				throw new BadRequestException("INVALID_SHARE_AMOUNT");
 			}
-			try {
-				sum = Math.addExact(sum, share.amountCents());
-			}
-			catch (ArithmeticException e) {
+			sum += share.amountCents();
+			if (sum > MAX_AMOUNT_CENTS) {
 				throw new BadRequestException("INVALID_EXPENSE_ALLOCATION");
 			}
 		}
@@ -107,6 +125,7 @@ public class ExpenseService {
 
 		return request.shares().stream()
 				.map(s -> new ExpenseShare(s.participantId(), s.amountCents()))
+				.sorted(SHARE_ORDER)
 				.toList();
 	}
 

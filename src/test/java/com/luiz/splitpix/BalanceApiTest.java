@@ -1,6 +1,7 @@
 package com.luiz.splitpix;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -8,6 +9,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 import tools.jackson.databind.JsonNode;
 
 class BalanceApiTest extends ApiTestSupport {
@@ -149,6 +151,7 @@ class BalanceApiTest extends ApiTestSupport {
 		TestGroup group = groupOfFive();
 		getBalances(group.groupId(), group.token())
 				.andExpect(status().isOk())
+				.andExpect(content().contentType(MediaType.APPLICATION_JSON))
 				.andExpect(jsonPath("$.groupId").value(group.groupId()))
 				.andExpect(jsonPath("$.balances.length()").value(5))
 				.andExpect(jsonPath("$.balances[0].displayName").value("Luiz"))

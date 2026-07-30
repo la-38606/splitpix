@@ -55,7 +55,7 @@ class ExpenseRollbackTest {
 		JsonNode group = objectMapper.readTree(created);
 
 		doThrow(new RuntimeException("simulated share insert failure"))
-				.when(expenseRepository).insertShares(any(), anyList());
+				.when(expenseRepository).insertShares(any(), any(), anyList());
 
 		mockMvc.perform(post("/api/v1/groups/" + group.get("groupId").asText() + "/expenses")
 				.param("token", group.get("inviteToken").asText())

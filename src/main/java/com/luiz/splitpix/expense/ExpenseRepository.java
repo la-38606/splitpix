@@ -43,13 +43,14 @@ public class ExpenseRepository {
 				id, groupId, paidByParticipantId, description, totalCents, idempotencyKey);
 	}
 
-	public void insertShares(UUID expenseId, List<ExpenseShare> shares) {
+	public void insertShares(UUID expenseId, UUID groupId, List<ExpenseShare> shares) {
 		jdbcTemplate.batchUpdate(
-				"INSERT INTO expense_shares (expense_id, participant_id, amount_cents) VALUES (?, ?, ?)",
+				"INSERT INTO expense_shares (expense_id, group_id, participant_id, amount_cents) VALUES (?, ?, ?, ?)",
 				shares, shares.size(), (ps, share) -> {
 					ps.setObject(1, expenseId);
-					ps.setObject(2, share.participantId());
-					ps.setLong(3, share.amountCents());
+					ps.setObject(2, groupId);
+					ps.setObject(3, share.participantId());
+					ps.setLong(4, share.amountCents());
 				});
 	}
 
