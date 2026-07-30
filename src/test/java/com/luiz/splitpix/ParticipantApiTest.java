@@ -1,62 +1,33 @@
 package com.luiz.splitpix;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.ResultActions;
+import tools.jackson.databind.JsonNode;
 
-@Import(TestcontainersConfiguration.class)
-@SpringBootTest
-@AutoConfigureMockMvc
-class ParticipantApiTest {
-
-	@Autowired
-	private MockMvc mockMvc;
-
-	@Autowired
-	private ObjectMapper objectMapper;
+class ParticipantApiTest extends ApiTestSupport {
 
 	private String groupId;
 	private String token;
 
 	@BeforeEach
-	void createGroup() throws Exception {
-		var result = mockMvc.perform(post("/api/v1/groups")
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-						{"groupName": "República", "creatorName": "Luiz"}
-						"""))
-				.andExpect(status().isCreated())
-				.andReturn();
-		JsonNode body = objectMapper.readTree(result.getResponse().getContentAsString());
+	void setUpGroup() throws Exception {
+		JsonNode body = createGroup("República", "Luiz");
 		groupId = body.get("groupId").asText();
 		token = body.get("inviteToken").asText();
 	}
 
-	private ResultActions addParticipant(String json) throws Exception {
-		return mockMvc.perform(post("/api/v1/groups/" + groupId + "/participants")
-				.param("token", token)
-				.contentType(MediaType.APPLICATION_JSON)
-				.content(json));
-	}
-
 	@Test
 	void addParticipant_returns201WithParticipant() throws Exception {
-		addParticipant("""
+		postParticipant(groupId, token, """
 				{"displayName": "Ana", "pixKeyType": "PHONE", "pixKeyValue": "+5511999999999"}
 				""")
 				.andExpect(status().isCreated())
+				.andExpect(content().contentType(MediaType.APPLICATION_JSON))
 				.andExpect(jsonPath("$.participantId").isNotEmpty())
 				.andExpect(jsonPath("$.displayName").value("Ana"))
 				.andExpect(jsonPath("$.pixKeyType").value("PHONE"));
@@ -64,11 +35,11 @@ class ParticipantApiTest {
 
 	@Test
 	void addParticipant_duplicatePixKeyInGroup_returns409() throws Exception {
-		addParticipant("""
+		postParticipant(groupId, token, """
 				{"displayName": "Ana", "pixKeyType": "PHONE", "pixKeyValue": "+5511999999999"}
 				""").andExpect(status().isCreated());
 
-		addParticipant("""
+		postParticipant(groupId, token, """
 				{"displayName": "Bruno", "pixKeyType": "PHONE", "pixKeyValue": "+5511999999999"}
 				""")
 				.andExpect(status().isConflict())
@@ -76,15 +47,31 @@ class ParticipantApiTest {
 	}
 
 	@Test
-	void addParticipant_withoutPixKey_isAllowed() throws Exception {
-		addParticipant("""
-				{"displayName": "Clara"}
+	void emailPixKeys_collideCaseInsensitively() throws Exception {
+		postParticipant(groupId, token, """
+				{"displayName": "Ana", "pixKeyType": "EMAIL", "pixKeyValue": "ana@x.com"}
 				""").andExpect(status().isCreated());
+
+		postParticipant(groupId, token, """
+				{"displayName": "Bruno", "pixKeyType": "EMAIL", "pixKeyValue": "Ana@X.com"}
+				""")
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("DUPLICATE_PIX_KEY"));
+	}
+
+	@Test
+	void addParticipant_withoutPixKey_isAllowed() throws Exception {
+		postParticipant(groupId, token, """
+				{"displayName": "Clara"}
+				""")
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.pixKeyType").value((Object) null))
+				.andExpect(jsonPath("$.pixKeyValue").value((Object) null));
 	}
 
 	@Test
 	void addParticipant_valueWithoutType_returns400() throws Exception {
-		addParticipant("""
+		postParticipant(groupId, token, """
 				{"displayName": "Diego", "pixKeyValue": "diego@example.com"}
 				""")
 				.andExpect(status().isBadRequest())
@@ -93,20 +80,27 @@ class ParticipantApiTest {
 
 	@Test
 	void addParticipant_wrongToken_returns403() throws Exception {
-		mockMvc.perform(post("/api/v1/groups/" + groupId + "/participants")
-				.param("token", "wrong")
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-						{"displayName": "Eva"}
-						"""))
+		postParticipant(groupId, "wrong", """
+				{"displayName": "Eva"}
+				""")
 				.andExpect(status().isForbidden())
 				.andExpect(jsonPath("$.code").value("INVALID_INVITE_TOKEN"));
 	}
 
 	@Test
 	void addParticipant_blankName_returns400() throws Exception {
-		addParticipant("""
+		postParticipant(groupId, token, """
 				{"displayName": ""}
+				""")
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+	}
+
+	@Test
+	void addParticipant_nonBreakingSpaceName_returns400() throws Exception {
+		// U+00A0 passes @NotBlank (not Java whitespace) but is visually blank.
+		postParticipant(groupId, token, """
+				{"displayName": "\\u00a0"}
 				""")
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
