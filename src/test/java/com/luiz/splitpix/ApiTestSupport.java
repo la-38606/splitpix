@@ -70,4 +70,17 @@ public abstract class ApiTestSupport {
 		return mockMvc.perform(get("/api/v1/groups/" + groupId).param("token", token));
 	}
 
+	protected ResultActions postExpense(String groupId, String token, String idempotencyKey, String json)
+			throws Exception {
+		return mockMvc.perform(post("/api/v1/groups/" + groupId + "/expenses")
+				.param("token", token)
+				.header("Idempotency-Key", idempotencyKey)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(json));
+	}
+
+	protected ResultActions getBalances(String groupId, String token) throws Exception {
+		return mockMvc.perform(get("/api/v1/groups/" + groupId + "/balances").param("token", token));
+	}
+
 }
