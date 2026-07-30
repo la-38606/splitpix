@@ -1,6 +1,8 @@
 package com.luiz.splitpix.expense;
 
 import com.luiz.splitpix.common.BadRequestException;
+import com.luiz.splitpix.common.IdempotencyKeys;
+import com.luiz.splitpix.common.Money;
 import com.luiz.splitpix.common.Texts;
 import com.luiz.splitpix.group.GroupRepository;
 import com.luiz.splitpix.group.GroupService;
@@ -17,13 +19,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ExpenseService {
-
-	/**
-	 * 10^12 centavos (R$ 10 bilhões). Matches the schema CHECKs; without a cap,
-	 * two Long.MAX_VALUE expenses overflow the balance aggregate and poison
-	 * every subsequent read of the group.
-	 */
-	static final long MAX_AMOUNT_CENTS = 1_000_000_000_000L;
 
 	/**
 	 * Canonical share order for responses: matches PostgreSQL's bytewise uuid
@@ -56,7 +51,7 @@ public class ExpenseService {
 	public CreateExpenseResult create(UUID groupId, String inviteToken, String idempotencyKey,
 			CreateExpenseRequest request) {
 		groupService.requireGroup(groupId, inviteToken);
-		validateIdempotencyKey(idempotencyKey);
+		IdempotencyKeys.validate(idempotencyKey);
 
 		groupRepository.lockById(groupId);
 
@@ -81,17 +76,8 @@ public class ExpenseService {
 		return new CreateExpenseResult(expense, shares, true);
 	}
 
-	private static void validateIdempotencyKey(String idempotencyKey) {
-		if (idempotencyKey == null || idempotencyKey.isBlank()) {
-			throw new BadRequestException("IDEMPOTENCY_KEY_REQUIRED");
-		}
-		if (idempotencyKey.length() > 120) {
-			throw new BadRequestException("VALIDATION_ERROR");
-		}
-	}
-
 	private List<ExpenseShare> validate(UUID groupId, CreateExpenseRequest request) {
-		if (request.totalCents() <= 0 || request.totalCents() > MAX_AMOUNT_CENTS) {
+		if (request.totalCents() <= 0 || request.totalCents() > Money.MAX_AMOUNT_CENTS) {
 			throw new BadRequestException("INVALID_EXPENSE_TOTAL");
 		}
 
@@ -111,11 +97,11 @@ public class ExpenseService {
 			if (!seen.add(share.participantId())) {
 				throw new BadRequestException("DUPLICATE_SHARE_PARTICIPANT");
 			}
-			if (share.amountCents() < 0 || share.amountCents() > MAX_AMOUNT_CENTS) {
+			if (share.amountCents() < 0 || share.amountCents() > Money.MAX_AMOUNT_CENTS) {
 				throw new BadRequestException("INVALID_SHARE_AMOUNT");
 			}
 			sum += share.amountCents();
-			if (sum > MAX_AMOUNT_CENTS) {
+			if (sum > Money.MAX_AMOUNT_CENTS) {
 				throw new BadRequestException("INVALID_EXPENSE_ALLOCATION");
 			}
 		}
