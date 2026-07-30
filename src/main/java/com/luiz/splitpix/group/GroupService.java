@@ -2,14 +2,13 @@ package com.luiz.splitpix.group;
 
 import com.luiz.splitpix.common.ForbiddenException;
 import com.luiz.splitpix.common.NotFoundException;
-import com.luiz.splitpix.participant.Participant;
+import com.luiz.splitpix.common.Texts;
 import com.luiz.splitpix.participant.ParticipantRepository;
 import com.luiz.splitpix.participant.PixKeys;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
-import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,24 +28,26 @@ public class GroupService {
 
 	@Transactional
 	public CreateGroupResult create(CreateGroupRequest request) {
-		String pixKeyValue = PixKeys.normalize(request.pixKeyValue());
+		String groupName = Texts.cleanName(request.groupName());
+		String creatorName = Texts.cleanName(request.creatorName());
+		String pixKeyValue = PixKeys.normalize(request.pixKeyType(), request.pixKeyValue());
 		PixKeys.validatePair(request.pixKeyType(), pixKeyValue);
 
 		UUID groupId = UUID.randomUUID();
 		UUID creatorId = UUID.randomUUID();
 		String inviteToken = newInviteToken();
 
-		groupRepository.insert(groupId, request.groupName().trim(), inviteToken);
-		participantRepository.insert(creatorId, groupId, request.creatorName().trim(),
-				request.pixKeyType(), pixKeyValue);
+		groupRepository.insert(groupId, groupName, inviteToken);
+		participantRepository.insert(creatorId, groupId, creatorName, request.pixKeyType(), pixKeyValue);
 
 		return new CreateGroupResult(groupId, inviteToken, creatorId);
 	}
 
+	/** Group plus participants in one transaction: one token check, one consistent snapshot. */
 	@Transactional(readOnly = true)
-	public List<Participant> getParticipants(UUID groupId, String inviteToken) {
-		requireGroup(groupId, inviteToken);
-		return participantRepository.findByGroupId(groupId);
+	public GroupView getView(UUID groupId, String inviteToken) {
+		Group group = requireGroup(groupId, inviteToken);
+		return new GroupView(group, participantRepository.findByGroupId(groupId));
 	}
 
 	/**

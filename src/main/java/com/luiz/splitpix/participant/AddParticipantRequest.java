@@ -7,4 +7,10 @@ public record AddParticipantRequest(
 		@NotBlank @Size(max = 100) String displayName,
 		PixKeyType pixKeyType,
 		@Size(max = 200) String pixKeyValue) {
+
+	public AddParticipantRequest {
+		displayName = displayName == null ? null : displayName.strip();
+		pixKeyValue = pixKeyValue == null ? null : pixKeyValue.strip();
+	}
+
 }

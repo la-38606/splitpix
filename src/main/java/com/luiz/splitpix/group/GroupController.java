@@ -2,7 +2,6 @@ package com.luiz.splitpix.group;
 
 import com.luiz.splitpix.participant.ParticipantResponse;
 import jakarta.validation.Valid;
-import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,10 +31,9 @@ public class GroupController {
 
 	@GetMapping("/{groupId}")
 	public GroupResponse get(@PathVariable UUID groupId, @RequestParam String token) {
-		Group group = groupService.requireGroup(groupId, token);
-		List<ParticipantResponse> participants = groupService.getParticipants(groupId, token)
-				.stream().map(ParticipantResponse::from).toList();
-		return new GroupResponse(group.id(), group.name(), participants);
+		GroupView view = groupService.getView(groupId, token);
+		return new GroupResponse(view.group().id(), view.group().name(),
+				view.participants().stream().map(ParticipantResponse::from).toList());
 	}
 
 }

@@ -34,4 +34,12 @@ public class GroupRepository {
 				.stream().findFirst();
 	}
 
+	/**
+	 * Serializes all writes within a group (design doc 13.3). Every write path
+	 * that changes accounting state must call this inside its transaction.
+	 */
+	public void lockById(UUID id) {
+		jdbcTemplate.queryForList("SELECT id FROM groups WHERE id = ? FOR UPDATE", id);
+	}
+
 }

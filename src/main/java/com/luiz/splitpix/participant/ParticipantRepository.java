@@ -1,5 +1,6 @@
 package com.luiz.splitpix.participant;
 
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -24,11 +25,14 @@ public class ParticipantRepository {
 		this.jdbcTemplate = jdbcTemplate;
 	}
 
-	public void insert(UUID id, UUID groupId, String displayName, PixKeyType pixKeyType, String pixKeyValue) {
-		jdbcTemplate.update("""
+	/** Returns the database-assigned creation timestamp. */
+	public Instant insert(UUID id, UUID groupId, String displayName, PixKeyType pixKeyType, String pixKeyValue) {
+		return jdbcTemplate.queryForObject("""
 				INSERT INTO participants (id, group_id, display_name, pix_key_type, pix_key_value)
 				VALUES (?, ?, ?, ?, ?)
+				RETURNING created_at
 				""",
+				(rs, rowNum) -> rs.getObject("created_at", OffsetDateTime.class).toInstant(),
 				id, groupId, displayName, pixKeyType == null ? null : pixKeyType.name(), pixKeyValue);
 	}
 
