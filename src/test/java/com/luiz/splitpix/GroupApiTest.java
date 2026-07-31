@@ -5,6 +5,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.Base64;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -27,6 +30,21 @@ class GroupApiTest extends ApiTestSupport {
 		UUID.fromString(body.get("creatorParticipantId").asText());
 		// 22 base64url chars ≈ the 128-bit entropy floor from addendum 35.6.
 		assertThat(body.get("inviteToken").asText().length()).isGreaterThanOrEqualTo(22);
+	}
+
+	@Test
+	void inviteTokens_areUnpredictable() throws Exception {
+		// The token is the only credential in the system: it must be distinct
+		// per group and carry real entropy, not a counter or a seeded PRNG.
+		Set<String> tokens = new HashSet<>();
+		for (int i = 0; i < 50; i++) {
+			String token = createGroup().get("inviteToken").asText();
+			assertThat(Base64.getUrlDecoder().decode(token).length)
+					.as("token entropy in bytes")
+					.isGreaterThanOrEqualTo(16);
+			tokens.add(token);
+		}
+		assertThat(tokens).hasSize(50);
 	}
 
 	@Test

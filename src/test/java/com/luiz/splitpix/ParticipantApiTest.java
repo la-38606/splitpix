@@ -97,6 +97,46 @@ class ParticipantApiTest extends ApiTestSupport {
 	}
 
 	@Test
+	void addParticipant_invisibleOrDeceptiveName_returns400() throws Exception {
+		// Zero-width and format characters render as nothing; ANSI escapes and
+		// bidi overrides actively lie in terminal output (demo.sh) and in a UI.
+		String[] names = {
+				"\\u200b\\u200d",   // zero-width space + joiner
+				"\\u00ad",          // soft hyphen
+				"\\u001b[31mAna",   // ANSI escape
+				"\\u202eAna",       // right-to-left override
+				"\\u0007Ana",       // bell
+		};
+		for (String name : names) {
+			postParticipant(groupId, token, """
+					{"displayName": "%s"}
+					""".formatted(name))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+		}
+	}
+
+	@Test
+	void addParticipant_accentsAndEmojiAreAccepted() throws Exception {
+		// The invisible-character rule must not reject legitimate names.
+		postParticipant(groupId, token, """
+				{"displayName": "José Antônio 🎉"}
+				""")
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.displayName").value("José Antônio 🎉"));
+	}
+
+	@Test
+	void addParticipant_pixKeyThatGrowsPastTheColumnWhenNormalized_returns400() throws Exception {
+		// U+0130 lowercases into two code points, so a 200-char key becomes 400.
+		postParticipant(groupId, token, """
+				{"displayName": "Zed", "pixKeyType": "EMAIL", "pixKeyValue": "%s"}
+				""".formatted("\\u0130".repeat(200)))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+	}
+
+	@Test
 	void addParticipant_nonBreakingSpaceName_returns400() throws Exception {
 		// U+00A0 passes @NotBlank (not Java whitespace) but is visually blank.
 		postParticipant(groupId, token, """

@@ -5,9 +5,13 @@ on:
     branches: ["main"]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -21,4 +25,4 @@ jobs:
           cache: maven
 
       - name: Run verification
-        run: mvn --batch-mode clean verify
+        run: ./mvnw --batch-mode clean verify

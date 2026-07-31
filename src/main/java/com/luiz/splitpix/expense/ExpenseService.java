@@ -58,9 +58,10 @@ public class ExpenseService {
 		var existing = expenseRepository.findByGroupIdAndIdempotencyKey(groupId, idempotencyKey);
 		if (existing.isPresent()) {
 			Expense expense = existing.get();
-			List<ExpenseShare> shares = expenseRepository.findShares(expense.id()).stream()
-					.sorted(SHARE_ORDER).toList();
-			return new CreateExpenseResult(expense, shares, false);
+			// findShares already returns SHARE_ORDER (PostgreSQL orders uuid
+			// bytewise, which matches the hex-string comparator), so the replay
+			// body is byte-identical to the original 201 without re-sorting.
+			return new CreateExpenseResult(expense, expenseRepository.findShares(expense.id()), false);
 		}
 
 		String description = Texts.cleanName(request.description());

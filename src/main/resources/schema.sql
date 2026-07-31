@@ -9,8 +9,9 @@
 --     is DEFERRABLE INITIALLY DEFERRED: group deletion cascades cleanly (nothing
 --     dangles at commit) while a lone participant delete still fails instead of
 --     silently corrupting the zero-sum invariant.
---   * Amounts are capped at 10^12 centavos: unbounded BIGINTs let two absurd
---     expenses overflow the balance aggregate and poison the group's reads.
+--   * Amounts are capped at 10^12 centavos so the balance aggregate always fits
+--     what the mapper can read back: SUM(bigint) returns numeric in PostgreSQL,
+--     so an uncapped group would sum past Long.MAX_VALUE and fail every read.
 --   * pix_key_type is CHECK-constrained; an out-of-enum row would otherwise break
 --     every read of its group at the RowMapper.
 
@@ -27,7 +28,8 @@ CREATE TABLE IF NOT EXISTS participants (
     display_name VARCHAR(100) NOT NULL,
     pix_key_type VARCHAR(20),
     pix_key_value VARCHAR(200),
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- clock_timestamp() for the same reason as expenses.created_at below.
+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
 
     CONSTRAINT valid_pix_key_type CHECK (
         pix_key_type IN ('EMAIL', 'PHONE', 'RANDOM')

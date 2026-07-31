@@ -145,6 +145,110 @@ class SchemaConstraintTest {
 				.isInstanceOf(DataIntegrityViolationException.class);
 	}
 
+	private void insertSettlement(UUID groupId, UUID payer, UUID recipient, long amountCents,
+			String idempotencyKey, String status) {
+		jdbcTemplate.update("""
+				INSERT INTO settlements (id, group_id, payer_participant_id, recipient_participant_id,
+				                         amount_cents, idempotency_key, status)
+				VALUES (?, ?, ?, ?, ?, ?, ?)
+				""", UUID.randomUUID(), groupId, payer, recipient, amountCents, idempotencyKey, status);
+	}
+
+	@Test
+	void negativeShareAmount_isRejected() {
+		UUID groupId = insertGroup();
+		UUID payer = insertParticipant(groupId, null);
+		UUID expenseId = insertExpense(groupId, payer, 100L, "k-negshare");
+		assertThatThrownBy(() -> insertShare(expenseId, groupId, payer, -1L))
+				.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
+	void shareAboveCap_isRejected() {
+		UUID groupId = insertGroup();
+		UUID payer = insertParticipant(groupId, null);
+		UUID expenseId = insertExpense(groupId, payer, 100L, "k-capshare");
+		assertThatThrownBy(() -> insertShare(expenseId, groupId, payer, 1_000_000_000_001L))
+				.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
+	void duplicateExpenseIdempotencyKeyInGroup_isRejected() {
+		UUID groupId = insertGroup();
+		UUID payer = insertParticipant(groupId, null);
+		insertExpense(groupId, payer, 100L, "same-key");
+		assertThatThrownBy(() -> insertExpense(groupId, payer, 200L, "same-key"))
+				.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
+	void sameExpenseIdempotencyKeyInDifferentGroups_isAllowed() {
+		UUID groupA = insertGroup();
+		UUID groupB = insertGroup();
+		insertExpense(groupA, insertParticipant(groupA, null), 100L, "cross-key");
+		insertExpense(groupB, insertParticipant(groupB, null), 100L, "cross-key");
+	}
+
+	@Test
+	void negativeSettlementAmount_isRejected() {
+		UUID groupId = insertGroup();
+		UUID payer = insertParticipant(groupId, null);
+		UUID recipient = insertParticipant(groupId, null);
+		assertThatThrownBy(() -> insertSettlement(groupId, payer, recipient, -1L, "s-neg", "COMPLETED"))
+				.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
+	void settlementAboveCap_isRejected() {
+		UUID groupId = insertGroup();
+		UUID payer = insertParticipant(groupId, null);
+		UUID recipient = insertParticipant(groupId, null);
+		assertThatThrownBy(() ->
+				insertSettlement(groupId, payer, recipient, 1_000_000_000_001L, "s-cap", "COMPLETED"))
+				.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
+	void selfSettlement_isRejected() {
+		UUID groupId = insertGroup();
+		UUID participant = insertParticipant(groupId, null);
+		assertThatThrownBy(() ->
+				insertSettlement(groupId, participant, participant, 100L, "s-self", "COMPLETED"))
+				.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
+	void settlementParticipantsFromAnotherGroup_areRejected() {
+		UUID groupA = insertGroup();
+		UUID groupB = insertGroup();
+		UUID insider = insertParticipant(groupA, null);
+		UUID outsider = insertParticipant(groupB, null);
+
+		assertThatThrownBy(() -> insertSettlement(groupA, outsider, insider, 100L, "s-x1", "COMPLETED"))
+				.isInstanceOf(DataIntegrityViolationException.class);
+		assertThatThrownBy(() -> insertSettlement(groupA, insider, outsider, 100L, "s-x2", "COMPLETED"))
+				.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
+	void settlementStatusOtherThanCompleted_isRejected() {
+		UUID groupId = insertGroup();
+		UUID payer = insertParticipant(groupId, null);
+		UUID recipient = insertParticipant(groupId, null);
+		assertThatThrownBy(() -> insertSettlement(groupId, payer, recipient, 100L, "s-status", "PENDING"))
+				.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
+	void duplicateSettlementIdempotencyKeyInGroup_isRejected() {
+		UUID groupId = insertGroup();
+		UUID payer = insertParticipant(groupId, null);
+		UUID recipient = insertParticipant(groupId, null);
+		insertSettlement(groupId, payer, recipient, 100L, "s-dup", "COMPLETED");
+		assertThatThrownBy(() -> insertSettlement(groupId, payer, recipient, 200L, "s-dup", "COMPLETED"))
+				.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
 	@Test
 	void deletingGroup_cascadesThroughFullGraph() {
 		UUID groupId = insertGroup();

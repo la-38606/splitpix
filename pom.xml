@@ -11,21 +11,9 @@
 	<groupId>com.luiz</groupId>
 	<artifactId>splitpix</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
-	<name/>
-	<description/>
-	<url/>
-	<licenses>
-		<license/>
-	</licenses>
-	<developers>
-		<developer/>
-	</developers>
-	<scm>
-		<connection/>
-		<developerConnection/>
-		<tag/>
-		<url/>
-	</scm>
+	<name>splitpix</name>
+	<description>Pix-inspired group-expense API: transactional accounting, idempotent writes, and simplified repayments.</description>
+	<url>https://github.com/la-38606/splitpix</url>
 	<properties>
 		<java.version>21</java.version>
 	</properties>

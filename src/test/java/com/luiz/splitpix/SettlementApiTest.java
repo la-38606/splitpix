@@ -133,6 +133,72 @@ class SettlementApiTest extends ApiTestSupport {
 	}
 
 	@Test
+	void payerWhoOwesNothing_toAGenuineCreditor_returns409() throws Exception {
+		// Isolates invariant 4: Luiz really is owed 5000, so the recipient-side
+		// check passes; only the payer-side check can reject Bia, who owes
+		// nothing and would become a creditor by "settling".
+		String biaId = addParticipant(groupId, token, "Bia").get("participantId").asText();
+
+		postSettlement(groupId, token, "s-nondebtor", settlementJson(biaId, luizId, 5000))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("SETTLEMENT_EXCEEDS_DEBT"));
+
+		Integer rows = jdbcTemplate.queryForObject(
+				"SELECT COUNT(*) FROM settlements WHERE group_id = ?::uuid", Integer.class, groupId);
+		assertThat(rows).isZero();
+	}
+
+	@Test
+	void replay_returnsBodyIdenticalToTheOriginal() throws Exception {
+		String original = postSettlement(groupId, token, "s-identical", settlementJson(anaId, luizId, 5000))
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
+
+		String replay = postSettlement(groupId, token, "s-identical", settlementJson(anaId, luizId, 5000))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString();
+
+		assertThat(replay).isEqualTo(original);
+	}
+
+	@Test
+	void blankIdempotencyKey_returns400() throws Exception {
+		postSettlement(groupId, token, "", settlementJson(anaId, luizId, 5000))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REQUIRED"));
+	}
+
+	@Test
+	void overlongIdempotencyKey_returns400() throws Exception {
+		postSettlement(groupId, token, "k".repeat(121), settlementJson(anaId, luizId, 5000))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+	}
+
+	@Test
+	void sameKeyInDifferentGroups_createsIndependentSettlements() throws Exception {
+		JsonNode other = createGroup("Outro", "Zé");
+		String otherGroupId = other.get("groupId").asText();
+		String otherToken = other.get("inviteToken").asText();
+		String otherLuiz = other.get("creatorParticipantId").asText();
+		String otherAna = addParticipant(otherGroupId, otherToken, "Ana").get("participantId").asText();
+
+		postExpense(otherGroupId, otherToken, "other-expense", """
+				{"description": "Jantar", "paidByParticipantId": "%s", "totalCents": 2000,
+				 "shares": [{"participantId": "%s", "amountCents": 2000}]}
+				""".formatted(otherLuiz, otherAna))
+				.andExpect(status().isCreated());
+
+		JsonNode first = readBody(postSettlement(groupId, token, "shared-key",
+				settlementJson(anaId, luizId, 5000)).andExpect(status().isCreated()));
+		JsonNode second = readBody(postSettlement(otherGroupId, otherToken, "shared-key",
+				settlementJson(otherAna, otherLuiz, 2000)).andExpect(status().isCreated()));
+
+		assertThat(second.get("settlementId").asText()).isNotEqualTo(first.get("settlementId").asText());
+		assertThat(second.get("amountCents").asLong()).isEqualTo(2000L);
+	}
+
+	@Test
 	void replayWithDifferentBody_returnsOriginalSettlement() throws Exception {
 		// Section 14.2: replay returns the existing settlement; request hashing
 		// (14.3) is a stretch goal, so the second body is ignored.

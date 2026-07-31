@@ -2,6 +2,7 @@ package com.luiz.splitpix.participant;
 
 import com.luiz.splitpix.common.ConflictException;
 import com.luiz.splitpix.common.Texts;
+import com.luiz.splitpix.group.GroupRepository;
 import com.luiz.splitpix.group.GroupService;
 import java.time.Instant;
 import java.util.UUID;
@@ -13,16 +14,25 @@ import org.springframework.transaction.annotation.Transactional;
 public class ParticipantService {
 
 	private final GroupService groupService;
+	private final GroupRepository groupRepository;
 	private final ParticipantRepository participantRepository;
 
-	public ParticipantService(GroupService groupService, ParticipantRepository participantRepository) {
+	public ParticipantService(GroupService groupService, GroupRepository groupRepository,
+			ParticipantRepository participantRepository) {
 		this.groupService = groupService;
+		this.groupRepository = groupRepository;
 		this.participantRepository = participantRepository;
 	}
 
 	@Transactional
 	public Participant add(UUID groupId, String inviteToken, AddParticipantRequest request) {
 		groupService.requireGroup(groupId, inviteToken);
+
+		// The group lock (13.3) is taken here too. The FK check on group_id
+		// already serialized this path against expense and settlement writes as
+		// a side effect; taking the lock explicitly makes that property visible
+		// and survives any future change to the foreign key.
+		groupRepository.lockById(groupId);
 
 		String displayName = Texts.cleanName(request.displayName());
 		String pixKeyValue = PixKeys.normalize(request.pixKeyType(), request.pixKeyValue());

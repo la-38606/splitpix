@@ -6,6 +6,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -70,6 +72,98 @@ class ExpenseApiTest extends ApiTestSupport {
 				"SELECT COUNT(*) FROM expenses WHERE group_id = ?::uuid AND idempotency_key = 'exp-replay'",
 				Integer.class, groupId);
 		assertThat(expenseCount).isEqualTo(1);
+	}
+
+	@Test
+	void createExpense_responseEchoesTheRequestExactly() throws Exception {
+		JsonNode body = readBody(postExpense(groupId, token, "exp-echo", expenseJson(30000, 10000, 12000, 8000))
+				.andExpect(status().isCreated()));
+
+		assertThat(body.get("description").asText()).isEqualTo("Jantar");
+		assertThat(body.get("paidByParticipantId").asText()).isEqualTo(luizId);
+		assertThat(body.get("totalCents").asLong()).isEqualTo(30000L);
+
+		Map<String, Long> shares = new HashMap<>();
+		body.get("shares").forEach(s ->
+				shares.put(s.get("participantId").asText(), s.get("amountCents").asLong()));
+		assertThat(shares)
+				.containsEntry(luizId, 10000L)
+				.containsEntry(anaId, 12000L)
+				.containsEntry(brunoId, 8000L);
+		assertThat(shares.values().stream().mapToLong(Long::longValue).sum()).isEqualTo(30000L);
+	}
+
+	@Test
+	void replay_returnsBodyIdenticalToTheOriginal() throws Exception {
+		// Shares are submitted in an order that is not the canonical one, so a
+		// create path that skipped the ordering would differ from the replay.
+		String json = """
+				{
+				  "description": "Jantar",
+				  "paidByParticipantId": "%s",
+				  "totalCents": 30000,
+				  "shares": [
+				    {"participantId": "%s", "amountCents": 8000},
+				    {"participantId": "%s", "amountCents": 12000},
+				    {"participantId": "%s", "amountCents": 10000}
+				  ]
+				}
+				""".formatted(luizId, brunoId, anaId, luizId);
+
+		String original = postExpense(groupId, token, "exp-identical", json)
+				.andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
+		String replay = postExpense(groupId, token, "exp-identical", json)
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString();
+
+		assertThat(replay).isEqualTo(original);
+	}
+
+	@Test
+	void nullShareElement_returns400() throws Exception {
+		postExpense(groupId, token, "exp-null-share", """
+				{"description": "Jantar", "paidByParticipantId": "%s", "totalCents": 100,
+				 "shares": [null]}
+				""".formatted(luizId))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+	}
+
+	@Test
+	void tooManyShares_returns400() throws Exception {
+		StringBuilder shares = new StringBuilder();
+		for (int i = 0; i < 501; i++) {
+			shares.append(i == 0 ? "" : ",")
+					.append("{\"participantId\": \"%s\", \"amountCents\": 1}".formatted(UUID.randomUUID()));
+		}
+		postExpense(groupId, token, "exp-many-shares", """
+				{"description": "Jantar", "paidByParticipantId": "%s", "totalCents": 501, "shares": [%s]}
+				""".formatted(luizId, shares))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+	}
+
+	@Test
+	void oversizedBody_isRejectedWithoutServerError() throws Exception {
+		// The JSON parser caps the document, so a huge body is refused while
+		// streaming instead of being materialized on the heap.
+		String padding = "d".repeat(2 * 1024 * 1024);
+		postExpense(groupId, token, "exp-huge-body", """
+				{"description": "%s", "paidByParticipantId": "%s", "totalCents": 100,
+				 "shares": [{"participantId": "%s", "amountCents": 100}]}
+				""".formatted(padding, luizId, luizId))
+				.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void fractionalAmount_isRejectedRatherThanTruncated() throws Exception {
+		postExpense(groupId, token, "exp-float", """
+				{"description": "Jantar", "paidByParticipantId": "%s", "totalCents": 1.5,
+				 "shares": [{"participantId": "%s", "amountCents": 1.5}]}
+				""".formatted(luizId, luizId))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
 	}
 
 	@Test
