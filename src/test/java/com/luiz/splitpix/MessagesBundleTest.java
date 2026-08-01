@@ -37,6 +37,7 @@ class MessagesBundleTest {
 			"INVALID_SETTLEMENT_AMOUNT",
 			"INVALID_SETTLEMENT_PARTICIPANTS",
 			"SETTLEMENT_EXCEEDS_DEBT",
+			"IDEMPOTENCY_CONFLICT",
 			"CONSTRAINT_VIOLATION",
 			"INTERNAL_ERROR");
 
@@ -62,9 +63,11 @@ class MessagesBundleTest {
 	}
 
 	@Test
-	void bundleHasNoKeysBeyondTheDeclaredCodes() {
+	void bundleHasNoErrorKeysBeyondTheDeclaredCodes() {
 		List<String> declared = ERROR_CODES.stream().map(code -> "error." + code).toList();
-		assertThat(java.util.Collections.list(bundle.getKeys()))
+		assertThat(java.util.Collections.list(bundle.getKeys()).stream()
+				.filter(key -> key.startsWith("error."))
+				.toList())
 				.as("an unreachable key is dead weight; a missing one fails at runtime")
 				.containsExactlyInAnyOrderElementsOf(declared);
 	}

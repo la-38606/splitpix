@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="robots" content="noindex, nofollow">
+	<title th:text="#{ui.erro.titulo}">Não foi possível continuar</title>
+	<link rel="stylesheet" th:href="@{/css/splitpix.css}">
+</head>
+<body class="page-erro">
+<div class="sheet">
+	<p class="brand" th:text="#{ui.app.nome}">SplitPix</p>
+	<h1 class="display display-erro" th:text="#{ui.erro.titulo}">Não foi possível continuar</h1>
+	<p class="erro-mensagem" th:text="${mensagem}">Mensagem.</p>
+	<p class="erro-codigo mono" th:text="${codigo}">CODIGO</p>
+	<p><a class="link-voltar" th:href="@{/}" th:text="#{ui.erro.inicio}">Voltar ao início</a></p>
+</div>
+</body>
+</html>

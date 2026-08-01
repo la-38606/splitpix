@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="robots" content="noindex, nofollow">
+	<title th:text="#{ui.app.nome}">SplitPix</title>
+	<link rel="stylesheet" th:href="@{/css/splitpix.css}">
+</head>
+<body class="page-home">
+<div class="sheet">
+	<header class="masthead">
+		<p class="brand" th:text="#{ui.app.nome}">SplitPix</p>
+		<h1 class="display" th:text="#{ui.home.titulo}">Dividir a conta</h1>
+		<p class="lede" th:text="#{ui.home.subtitulo}">Registre as despesas do grupo.</p>
+	</header>
+
+	<form class="form form-destaque" method="post" th:action="@{/grupos}">
+		<h2 class="rotulo-secao" th:text="#{ui.home.form}">Novo grupo</h2>
+
+		<label class="campo">
+			<span th:text="#{ui.campo.nomeGrupo}">Nome do grupo</span>
+			<input type="text" name="groupName" maxlength="120" required autofocus>
+		</label>
+
+		<label class="campo">
+			<span th:text="#{ui.campo.seuNome}">Seu nome</span>
+			<input type="text" name="creatorName" maxlength="100" required>
+		</label>
+
+		<fieldset class="campo-duplo">
+			<legend th:text="#{ui.campo.suaChave}">Sua chave Pix (opcional)</legend>
+			<select name="pixKeyType">
+				<option value="" th:text="#{ui.campo.semChave}">sem chave</option>
+				<option value="EMAIL">e-mail</option>
+				<option value="PHONE">telefone</option>
+				<option value="RANDOM">aleatória</option>
+			</select>
+			<input type="text" name="pixKeyValue" maxlength="200" th:placeholder="#{ui.campo.chavePlaceholder}">
+		</fieldset>
+
+		<button type="submit" class="botao-primario" th:text="#{ui.home.criar}">Criar grupo</button>
+	</form>
+
+	<footer class="rodape-nota">
+		<p th:text="#{ui.aviso.semPagamento}">O SplitPix não envia pagamentos Pix reais.</p>
+	</footer>
+</div>
+</body>
+</html>

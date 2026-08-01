@@ -6,6 +6,7 @@ import com.luiz.splitpix.common.BadRequestException;
 import com.luiz.splitpix.common.ConflictException;
 import com.luiz.splitpix.common.IdempotencyKeys;
 import com.luiz.splitpix.common.Money;
+import com.luiz.splitpix.common.RequestHashes;
 import com.luiz.splitpix.group.GroupRepository;
 import com.luiz.splitpix.group.GroupService;
 import java.util.Map;
@@ -41,11 +42,16 @@ public class SettlementService {
 			CompleteSettlementRequest request) {
 		groupService.requireGroup(groupId, inviteToken);
 		IdempotencyKeys.validate(idempotencyKey);
+		String requestHash = RequestHashes.of(request.payerParticipantId(),
+				request.recipientParticipantId(), request.amountCents());
 
 		groupRepository.lockById(groupId);
 
 		var existing = settlementRepository.findByGroupIdAndIdempotencyKey(groupId, idempotencyKey);
 		if (existing.isPresent()) {
+			if (!existing.get().requestHash().equals(requestHash)) {
+				throw new ConflictException("IDEMPOTENCY_CONFLICT");
+			}
 			return new CompleteSettlementResult(existing.get(), false);
 		}
 
@@ -73,11 +79,11 @@ public class SettlementService {
 
 		UUID settlementId = UUID.randomUUID();
 		var createdAt = settlementRepository.insert(settlementId, groupId, request.payerParticipantId(),
-				request.recipientParticipantId(), amount, idempotencyKey);
+				request.recipientParticipantId(), amount, idempotencyKey, requestHash);
 
 		return new CompleteSettlementResult(new Settlement(settlementId, groupId,
 				request.payerParticipantId(), request.recipientParticipantId(), amount,
-				idempotencyKey, SettlementRepository.STATUS_COMPLETED, createdAt), true);
+				idempotencyKey, requestHash, SettlementRepository.STATUS_COMPLETED, createdAt), true);
 	}
 
 }

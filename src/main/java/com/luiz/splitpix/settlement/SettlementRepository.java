@@ -21,6 +21,7 @@ public class SettlementRepository {
 			rs.getObject("recipient_participant_id", UUID.class),
 			rs.getLong("amount_cents"),
 			rs.getString("idempotency_key"),
+			rs.getString("request_hash"),
 			rs.getString("status"),
 			rs.getObject("created_at", OffsetDateTime.class).toInstant());
 
@@ -32,22 +33,23 @@ public class SettlementRepository {
 
 	/** Returns the database-assigned creation timestamp. */
 	public Instant insert(UUID id, UUID groupId, UUID payerParticipantId, UUID recipientParticipantId,
-			long amountCents, String idempotencyKey) {
+			long amountCents, String idempotencyKey, String requestHash) {
 		return jdbcTemplate.queryForObject("""
 				INSERT INTO settlements
-				    (id, group_id, payer_participant_id, recipient_participant_id, amount_cents, idempotency_key, status)
-				VALUES (?, ?, ?, ?, ?, ?, ?)
+				    (id, group_id, payer_participant_id, recipient_participant_id, amount_cents,
+				     idempotency_key, request_hash, status)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 				RETURNING created_at
 				""",
 				(rs, rowNum) -> rs.getObject("created_at", OffsetDateTime.class).toInstant(),
 				id, groupId, payerParticipantId, recipientParticipantId, amountCents, idempotencyKey,
-				STATUS_COMPLETED);
+				requestHash, STATUS_COMPLETED);
 	}
 
 	public Optional<Settlement> findByGroupIdAndIdempotencyKey(UUID groupId, String idempotencyKey) {
 		return jdbcTemplate.query("""
 				SELECT id, group_id, payer_participant_id, recipient_participant_id,
-				       amount_cents, idempotency_key, status, created_at
+				       amount_cents, idempotency_key, request_hash, status, created_at
 				FROM settlements
 				WHERE group_id = ? AND idempotency_key = ?
 				""", MAPPER, groupId, idempotencyKey)

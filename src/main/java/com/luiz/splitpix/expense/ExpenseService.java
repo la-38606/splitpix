@@ -1,8 +1,10 @@
 package com.luiz.splitpix.expense;
 
 import com.luiz.splitpix.common.BadRequestException;
+import com.luiz.splitpix.common.ConflictException;
 import com.luiz.splitpix.common.IdempotencyKeys;
 import com.luiz.splitpix.common.Money;
+import com.luiz.splitpix.common.RequestHashes;
 import com.luiz.splitpix.common.Texts;
 import com.luiz.splitpix.group.GroupRepository;
 import com.luiz.splitpix.group.GroupService;
@@ -52,12 +54,16 @@ public class ExpenseService {
 			CreateExpenseRequest request) {
 		groupService.requireGroup(groupId, inviteToken);
 		IdempotencyKeys.validate(idempotencyKey);
+		String requestHash = hash(request);
 
 		groupRepository.lockById(groupId);
 
 		var existing = expenseRepository.findByGroupIdAndIdempotencyKey(groupId, idempotencyKey);
 		if (existing.isPresent()) {
 			Expense expense = existing.get();
+			if (!expense.requestHash().equals(requestHash)) {
+				throw new ConflictException("IDEMPOTENCY_CONFLICT");
+			}
 			// findShares already returns SHARE_ORDER (PostgreSQL orders uuid
 			// bytewise, which matches the hex-string comparator), so the replay
 			// body is byte-identical to the original 201 without re-sorting.
@@ -69,12 +75,23 @@ public class ExpenseService {
 
 		UUID expenseId = UUID.randomUUID();
 		var createdAt = expenseRepository.insertExpense(expenseId, groupId, request.paidByParticipantId(),
-				description, request.totalCents(), idempotencyKey);
+				description, request.totalCents(), idempotencyKey, requestHash);
 		expenseRepository.insertShares(expenseId, groupId, shares);
 
 		Expense expense = new Expense(expenseId, groupId, request.paidByParticipantId(),
-				description, request.totalCents(), idempotencyKey, createdAt);
+				description, request.totalCents(), idempotencyKey, requestHash, createdAt);
 		return new CreateExpenseResult(expense, shares, true);
+	}
+
+	/** Covers everything that changes what the expense means. */
+	private static String hash(CreateExpenseRequest request) {
+		StringBuilder shares = new StringBuilder();
+		request.shares().stream()
+				.sorted(Comparator.comparing(share -> String.valueOf(share.participantId())))
+				.forEach(share -> shares.append(share.participantId()).append('=')
+						.append(share.amountCents()).append(','));
+		return RequestHashes.of(request.description(), request.paidByParticipantId(),
+				request.totalCents(), shares);
 	}
 
 	private List<ExpenseShare> validate(UUID groupId, CreateExpenseRequest request) {

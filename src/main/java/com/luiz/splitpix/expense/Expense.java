@@ -10,5 +10,6 @@ public record Expense(
 		String description,
 		long totalCents,
 		String idempotencyKey,
+		String requestHash,
 		Instant createdAt) {
 }

@@ -19,6 +19,7 @@ public class ExpenseRepository {
 			rs.getString("description"),
 			rs.getLong("total_cents"),
 			rs.getString("idempotency_key"),
+			rs.getString("request_hash"),
 			rs.getObject("created_at", OffsetDateTime.class).toInstant());
 
 	private static final RowMapper<ExpenseShare> SHARE_MAPPER = (rs, rowNum) -> new ExpenseShare(
@@ -33,14 +34,15 @@ public class ExpenseRepository {
 
 	/** Returns the database-assigned creation timestamp. */
 	public Instant insertExpense(UUID id, UUID groupId, UUID paidByParticipantId, String description,
-			long totalCents, String idempotencyKey) {
+			long totalCents, String idempotencyKey, String requestHash) {
 		return jdbcTemplate.queryForObject("""
-				INSERT INTO expenses (id, group_id, paid_by_participant_id, description, total_cents, idempotency_key)
-				VALUES (?, ?, ?, ?, ?, ?)
+				INSERT INTO expenses (id, group_id, paid_by_participant_id, description, total_cents,
+				                      idempotency_key, request_hash)
+				VALUES (?, ?, ?, ?, ?, ?, ?)
 				RETURNING created_at
 				""",
 				(rs, rowNum) -> rs.getObject("created_at", OffsetDateTime.class).toInstant(),
-				id, groupId, paidByParticipantId, description, totalCents, idempotencyKey);
+				id, groupId, paidByParticipantId, description, totalCents, idempotencyKey, requestHash);
 	}
 
 	public void insertShares(UUID expenseId, UUID groupId, List<ExpenseShare> shares) {
@@ -56,7 +58,8 @@ public class ExpenseRepository {
 
 	public Optional<Expense> findByGroupIdAndIdempotencyKey(UUID groupId, String idempotencyKey) {
 		return jdbcTemplate.query("""
-				SELECT id, group_id, paid_by_participant_id, description, total_cents, idempotency_key, created_at
+				SELECT id, group_id, paid_by_participant_id, description, total_cents,
+				       idempotency_key, request_hash, created_at
 				FROM expenses
 				WHERE group_id = ? AND idempotency_key = ?
 				""", MAPPER, groupId, idempotencyKey)

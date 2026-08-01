@@ -137,8 +137,8 @@ class BalanceApiTest extends ApiTestSupport {
 
 		jdbcTemplate.update("""
 				INSERT INTO settlements (id, group_id, payer_participant_id, recipient_participant_id,
-				                         amount_cents, idempotency_key, status)
-				VALUES (?, ?::uuid, ?::uuid, ?::uuid, ?, ?, 'COMPLETED')
+				                         amount_cents, idempotency_key, request_hash, status)
+				VALUES (?, ?::uuid, ?::uuid, ?::uuid, ?, ?, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'COMPLETED')
 				""", UUID.randomUUID(), group.groupId(), ids.get("Ana"), ids.get("Luiz"), 5000L, "settle-1");
 
 		Map<String, Long> balances = balancesByParticipantId(group);

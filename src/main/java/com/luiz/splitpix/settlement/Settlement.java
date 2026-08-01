@@ -10,6 +10,7 @@ public record Settlement(
 		UUID recipientParticipantId,
 		long amountCents,
 		String idempotencyKey,
+		String requestHash,
 		String status,
 		Instant createdAt) {
 }

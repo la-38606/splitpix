@@ -40,7 +40,7 @@ class SettlementRollbackTest extends ApiTestSupport {
 		doAnswer(invocation -> {
 			invocation.callRealMethod();
 			throw new RuntimeException("simulated failure after real insert");
-		}).when(settlementRepository).insert(any(), any(), any(), any(), anyLong(), anyString());
+		}).when(settlementRepository).insert(any(), any(), any(), any(), anyLong(), anyString(), anyString());
 
 		postSettlement(groupId, token, "s1", settlementJson(anaId, luizId, 5000))
 				.andExpect(status().isInternalServerError())

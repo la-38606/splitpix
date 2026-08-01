@@ -167,27 +167,41 @@ class ExpenseApiTest extends ApiTestSupport {
 	}
 
 	@Test
-	void sameKeyDifferentBody_returnsOriginalExpense() throws Exception {
-		// Section 14.1: replay returns the already-created expense; request
-		// hashing (14.3) is a stretch goal, so the second body is ignored.
-		readBody(postExpense(groupId, token, "exp-original", expenseJson(30000, 10000, 12000, 8000))
-				.andExpect(status().isCreated()));
+	void sameKeyDifferentBody_returns409() throws Exception {
+		// Request hashing (14.3, made a precondition by addendum 36.5): reusing
+		// a key with different content is a conflict, not a silent no-op that
+		// discards the caller's new data.
+		postExpense(groupId, token, "exp-original", expenseJson(30000, 10000, 12000, 8000))
+				.andExpect(status().isCreated());
 
-		JsonNode replay = readBody(postExpense(groupId, token, "exp-original", expenseJson(500, 500, 0, 0))
-				.andExpect(status().isOk()));
+		postExpense(groupId, token, "exp-original", expenseJson(500, 500, 0, 0))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("IDEMPOTENCY_CONFLICT"));
 
-		assertThat(replay.get("totalCents").asLong()).isEqualTo(30000L);
-		assertThat(replay.get("shares").size()).isEqualTo(3);
+		Integer rows = jdbcTemplate.queryForObject(
+				"SELECT COUNT(*) FROM expenses WHERE idempotency_key = 'exp-original'", Integer.class);
+		assertThat(rows).isEqualTo(1);
 	}
 
 	@Test
-	void sameKeyInvalidSecondBody_stillReplays() throws Exception {
-		postExpense(groupId, token, "exp-invalid-replay", expenseJson(30000, 10000, 12000, 8000))
+	void sameKeyIdenticalBody_replaysRegardlessOfShareOrder() throws Exception {
+		// The hash is order-insensitive: the same allocation submitted with the
+		// shares listed differently is the same request, not a conflict.
+		postExpense(groupId, token, "exp-order", expenseJson(30000, 10000, 12000, 8000))
 				.andExpect(status().isCreated());
 
-		// Replay lookup runs before validation: an invalid retry of an already
-		// -applied request must not error.
-		postExpense(groupId, token, "exp-invalid-replay", expenseJson(-5, 0, 0, 0))
+		postExpense(groupId, token, "exp-order", """
+				{
+				  "description": "Jantar",
+				  "paidByParticipantId": "%s",
+				  "totalCents": 30000,
+				  "shares": [
+				    {"participantId": "%s", "amountCents": 8000},
+				    {"participantId": "%s", "amountCents": 12000},
+				    {"participantId": "%s", "amountCents": 10000}
+				  ]
+				}
+				""".formatted(luizId, brunoId, anaId, luizId))
 				.andExpect(status().isOk());
 	}
 

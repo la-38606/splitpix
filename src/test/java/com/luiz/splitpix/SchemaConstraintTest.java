@@ -41,8 +41,9 @@ class SchemaConstraintTest {
 	private UUID insertExpense(UUID groupId, UUID payer, long totalCents, String idempotencyKey) {
 		UUID id = UUID.randomUUID();
 		jdbcTemplate.update("""
-				INSERT INTO expenses (id, group_id, paid_by_participant_id, description, total_cents, idempotency_key)
-				VALUES (?, ?, ?, ?, ?, ?)
+				INSERT INTO expenses (id, group_id, paid_by_participant_id, description, total_cents,
+				                      idempotency_key, request_hash)
+				VALUES (?, ?, ?, ?, ?, ?, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
 				""", id, groupId, payer, "dinner", totalCents, idempotencyKey);
 		return id;
 	}
@@ -149,8 +150,8 @@ class SchemaConstraintTest {
 			String idempotencyKey, String status) {
 		jdbcTemplate.update("""
 				INSERT INTO settlements (id, group_id, payer_participant_id, recipient_participant_id,
-				                         amount_cents, idempotency_key, status)
-				VALUES (?, ?, ?, ?, ?, ?, ?)
+				                         amount_cents, idempotency_key, request_hash, status)
+				VALUES (?, ?, ?, ?, ?, ?, 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', ?)
 				""", UUID.randomUUID(), groupId, payer, recipient, amountCents, idempotencyKey, status);
 	}
 
@@ -258,11 +259,7 @@ class SchemaConstraintTest {
 		UUID expenseId = insertExpense(groupId, payer, 300L, "k3");
 		insertShare(expenseId, groupId, payer, 100L);
 		insertShare(expenseId, groupId, other, 200L);
-		jdbcTemplate.update("""
-				INSERT INTO settlements (id, group_id, payer_participant_id, recipient_participant_id,
-				                         amount_cents, idempotency_key, status)
-				VALUES (?, ?, ?, ?, ?, ?, ?)
-				""", UUID.randomUUID(), groupId, other, payer, 200L, "k4", "COMPLETED");
+		insertSettlement(groupId, other, payer, 200L, "k4", "COMPLETED");
 
 		jdbcTemplate.update("DELETE FROM groups WHERE id = ?", groupId);
 

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="robots" content="noindex, nofollow">
+	<meta name="referrer" content="no-referrer">
+	<title th:text="${page.group().name()}">Grupo</title>
+	<link rel="stylesheet" th:href="@{/css/splitpix.css}">
+</head>
+<body>
+
+<header class="topo">
+	<div class="topo-inner">
+		<p class="brand" th:text="#{ui.app.nome}">SplitPix</p>
+		<h1 class="nome-grupo" th:text="${page.group().name()}">Grupo</h1>
+		<p class="convite">
+			<span class="rotulo-micro" th:text="#{ui.grupo.convite}">Link de convite</span>
+			<button type="button" class="botao-copiar" th:data-copiar="${inviteLink}"
+					th:data-copiado="#{ui.acao.copiado}" th:text="#{ui.acao.copiarLink}">copiar link</button>
+		</p>
+	</div>
+</header>
+
+<p class="aviso" th:if="${aviso}" th:text="#{${aviso}}">Aviso</p>
+
+<!-- Faixa de saldos: sangria total, régua em cima e embaixo -->
+<section class="faixa">
+	<div class="faixa-inner">
+		<div class="faixa-total">
+			<p class="rotulo-micro" th:text="#{ui.grupo.emAberto}">Em aberto</p>
+			<p class="cifra-grande">
+				<span class="moeda">R$</span><span
+					th:text="${@pageFormats.amount(page.outstandingCents())}">0,00</span>
+			</p>
+			<p class="faixa-nota" th:text="#{ui.grupo.somaZero}">A soma dos saldos é sempre zero.</p>
+		</div>
+
+		<ul class="saldos">
+			<li th:each="saldo : ${page.balances()}">
+				<span class="saldo-nome" th:text="${saldo.displayName()}">Nome</span>
+				<span class="saldo-cifra mono"
+					  th:classappend="${saldo.balanceCents() > 0} ? 'credito' : (${saldo.balanceCents() < 0} ? 'debito' : 'zerado')"
+					  th:text="${@pageFormats.amount(saldo.balanceCents())}">0,00</span>
+			</li>
+		</ul>
+	</div>
+</section>
+
+<div class="colunas">
+
+	<main class="coluna-principal">
+
+		<section class="bloco">
+			<h2 class="rotulo-secao" th:text="#{ui.grupo.pagamentos}">Pagamentos sugeridos</h2>
+
+			<p class="vazio" th:if="${page.settled()}" th:text="#{ui.grupo.tudoQuitado}">Tudo quitado.</p>
+
+			<ol class="pagamentos" th:unless="${page.settled()}">
+				<li th:each="pagamento : ${page.payments()}">
+					<div class="pagamento-linha">
+						<span class="pagamento-de" th:text="${pagamento.payerName()}">De</span>
+						<span class="seta" aria-hidden="true">→</span>
+						<span class="pagamento-para" th:text="${pagamento.recipientName()}">Para</span>
+						<span class="pagamento-valor mono">
+							<span class="moeda-pequena">R$</span><span
+								th:text="${@pageFormats.amount(pagamento.amountCents())}">0,00</span>
+						</span>
+					</div>
+
+					<div class="pagamento-chave">
+						<span class="rotulo-micro" th:text="#{ui.grupo.chaveDe}">Chave Pix de</span>
+						<span class="rotulo-micro" th:text="${pagamento.recipientName()}">nome</span>
+						<code class="chave" th:if="${pagamento.recipientPixKey()}"
+							  th:text="${pagamento.recipientPixKey()}">chave</code>
+						<em class="chave-ausente" th:unless="${pagamento.recipientPixKey()}"
+							th:text="#{ui.grupo.semChave}">sem chave cadastrada</em>
+						<button type="button" class="botao-copiar" th:if="${pagamento.recipientPixKey()}"
+								th:data-copiar="${pagamento.recipientPixKey()}"
+								th:data-copiado="#{ui.acao.copiado}"
+								th:text="#{ui.acao.copiarChave}">copiar chave</button>
+
+						<form method="post" th:action="@{/g/{id}/pagamentos(id=${page.group().id()})}">
+							<input type="hidden" name="payerParticipantId" th:value="${pagamento.payerParticipantId()}">
+							<input type="hidden" name="recipientParticipantId" th:value="${pagamento.recipientParticipantId()}">
+							<input type="hidden" name="amountCents" th:value="${pagamento.amountCents()}">
+							<input type="hidden" name="idempotencyKey" th:value="${page.expenseIdempotencyKey() + '-' + pagamento.payerParticipantId()}">
+							<button type="submit" class="botao-marcar" th:text="#{ui.acao.marcarPago}">marcar como pago</button>
+						</form>
+					</div>
+				</li>
+			</ol>
+		</section>
+
+		<section class="bloco">
+			<h2 class="rotulo-secao" th:text="#{ui.grupo.historico}">Histórico</h2>
+
+			<p class="vazio" th:unless="${page.hasHistory()}" th:text="#{ui.grupo.semLancamentos}">
+				Nenhum lançamento ainda.</p>
+
+			<table class="livro" th:if="${page.hasHistory()}">
+				<tbody>
+				<tr th:each="item : ${page.history()}">
+					<td class="livro-tipo rotulo-micro"
+						th:text="${item.type() == 'EXPENSE'} ? #{ui.historico.despesa} : #{ui.historico.pagamento}">tipo</td>
+					<td class="livro-descricao">
+						<span th:if="${item.type() == 'EXPENSE'}" th:text="${item.description()}">descrição</span>
+						<span th:unless="${item.type() == 'EXPENSE'}">
+							<span th:text="${page.namesById().get(item.payerParticipantId())}">de</span>
+							<span class="seta" aria-hidden="true">→</span>
+							<span th:text="${page.namesById().get(item.recipientParticipantId())}">para</span>
+						</span>
+					</td>
+					<td class="livro-quem rotulo-micro" th:if="${item.type() == 'EXPENSE'}"
+						th:text="${page.namesById().get(item.payerParticipantId())}">quem pagou</td>
+					<td class="livro-quem" th:unless="${item.type() == 'EXPENSE'}"></td>
+					<td class="livro-valor mono"
+						th:text="${@pageFormats.amount(item.amountCents())}">0,00</td>
+				</tr>
+				</tbody>
+			</table>
+		</section>
+	</main>
+
+	<aside class="rail">
+
+		<section class="bloco">
+			<h2 class="rotulo-secao" th:text="#{ui.grupo.novaDespesa}">Nova despesa</h2>
+
+			<p class="vazio" th:if="${page.participants().size() < 2}" th:text="#{ui.grupo.adicioneAntes}">
+				Adicione participantes primeiro.</p>
+
+			<form class="form" method="post" th:if="${page.participants().size() >= 2}"
+				  th:action="@{/g/{id}/despesas(id=${page.group().id()})}">
+				<input type="hidden" name="idempotencyKey" th:value="${page.expenseIdempotencyKey()}">
+
+				<label class="campo">
+					<span th:text="#{ui.campo.descricao}">Descrição</span>
+					<input type="text" name="description" maxlength="200" required>
+				</label>
+
+				<label class="campo">
+					<span th:text="#{ui.campo.quemPagou}">Quem pagou</span>
+					<select name="paidByParticipantId" required>
+						<option th:each="p : ${page.participants()}" th:value="${p.id()}"
+								th:text="${p.displayName()}">nome</option>
+					</select>
+				</label>
+
+				<label class="campo">
+					<span th:text="#{ui.campo.total}">Valor total (R$)</span>
+					<input type="text" name="totalReais" inputmode="decimal" required placeholder="420,00">
+				</label>
+
+				<fieldset class="partes">
+					<legend th:text="#{ui.campo.partes}">Parte de cada um (R$)</legend>
+					<label class="parte" th:each="p : ${page.participants()}">
+						<span th:text="${p.displayName()}">nome</span>
+						<input type="text" inputmode="decimal" th:name="'share-' + ${p.id()}" placeholder="0,00">
+					</label>
+					<p class="nota-campo" th:text="#{ui.campo.partesNota}">A soma das partes deve ser igual ao total.</p>
+				</fieldset>
+
+				<button type="submit" class="botao-primario" th:text="#{ui.acao.registrarDespesa}">Registrar</button>
+			</form>
+		</section>
+
+		<section class="bloco">
+			<h2 class="rotulo-secao" th:text="#{ui.grupo.participantes}">Participantes</h2>
+
+			<ul class="participantes">
+				<li th:each="p : ${page.participants()}">
+					<span class="participante-nome" th:text="${p.displayName()}">nome</span>
+					<code class="chave-mascarada" th:if="${p.pixKeyValue()}"
+						  th:text="${@pageFormats.maskedKey(p.pixKeyValue())}">chave</code>
+					<span class="chave-ausente rotulo-micro" th:unless="${p.pixKeyValue()}"
+						  th:text="#{ui.grupo.semChave}">sem chave</span>
+				</li>
+			</ul>
+
+			<form class="form form-compacto" method="post"
+				  th:action="@{/g/{id}/participantes(id=${page.group().id()})}">
+				<label class="campo">
+					<span th:text="#{ui.campo.nome}">Nome</span>
+					<input type="text" name="displayName" maxlength="100" required>
+				</label>
+				<fieldset class="campo-duplo">
+					<legend th:text="#{ui.campo.chavePix}">Chave Pix (opcional)</legend>
+					<select name="pixKeyType">
+						<option value="" th:text="#{ui.campo.semChave}">sem chave</option>
+						<option th:each="tipo : ${keyTypes}" th:value="${tipo}" th:text="${tipo}">tipo</option>
+					</select>
+					<input type="text" name="pixKeyValue" maxlength="200">
+				</fieldset>
+				<button type="submit" class="botao-secundario" th:text="#{ui.acao.adicionar}">Adicionar</button>
+			</form>
+		</section>
+
+		<p class="rodape-nota" th:text="#{ui.aviso.semPagamento}">
+			O SplitPix não envia pagamentos Pix reais.</p>
+	</aside>
+</div>
+
+<script th:src="@{/js/copiar.js}" defer></script>
+</body>
+</html>

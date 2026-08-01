@@ -199,24 +199,19 @@ class SettlementApiTest extends ApiTestSupport {
 	}
 
 	@Test
-	void replayWithDifferentBody_returnsOriginalSettlement() throws Exception {
-		// Section 14.2: replay returns the existing settlement; request hashing
-		// (14.3) is a stretch goal, so the second body is ignored.
+	void replayWithDifferentBody_returns409() throws Exception {
+		// Request hashing (14.3 / addendum 36.5): a key reused with a different
+		// amount is a conflict — the browser back button is the common cause.
 		postSettlement(groupId, token, "s-div", settlementJson(anaId, luizId, 5000))
 				.andExpect(status().isCreated());
 
-		JsonNode replay = readBody(postSettlement(groupId, token, "s-div", settlementJson(anaId, luizId, 1234))
-				.andExpect(status().isOk()));
-		assertThat(replay.get("amountCents").asLong()).isEqualTo(5000L);
-	}
+		postSettlement(groupId, token, "s-div", settlementJson(anaId, luizId, 1234))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("IDEMPOTENCY_CONFLICT"));
 
-	@Test
-	void replayWithInvalidBody_stillReplays() throws Exception {
-		postSettlement(groupId, token, "s-inv", settlementJson(anaId, luizId, 5000))
-				.andExpect(status().isCreated());
-
-		postSettlement(groupId, token, "s-inv", settlementJson(anaId, luizId, -1))
-				.andExpect(status().isOk());
+		Integer rows = jdbcTemplate.queryForObject(
+				"SELECT COUNT(*) FROM settlements WHERE group_id = ?::uuid", Integer.class, groupId);
+		assertThat(rows).isEqualTo(1);
 	}
 
 	@Test
