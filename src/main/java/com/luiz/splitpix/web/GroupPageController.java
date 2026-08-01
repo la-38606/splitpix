@@ -110,12 +110,12 @@ public class GroupPageController {
 		form.forEach((field, value) -> {
 			if (field.startsWith("share-") && !value.isBlank()) {
 				shares.add(new CreateExpenseRequest.ShareRequest(
-						UUID.fromString(field.substring("share-".length())), cents(value)));
+						UUID.fromString(field.substring("share-".length())), MoneyInput.parseCents(value)));
 			}
 		});
 
 		expenseService.create(groupId, InviteCookie.require(request), idempotencyKey,
-				new CreateExpenseRequest(description, paidByParticipantId, cents(totalReais), shares));
+				new CreateExpenseRequest(description, paidByParticipantId, MoneyInput.parseCents(totalReais), shares));
 		redirect.addFlashAttribute("aviso", "despesa.registrada");
 		return "redirect:/g/" + groupId;
 	}
@@ -163,14 +163,6 @@ public class GroupPageController {
 
 	private static String emptyToNull(String value) {
 		return value == null || value.isBlank() ? null : value;
-	}
-
-	/** Accepts "70", "70,50" and "70.50" — all three are natural to type. */
-	private static long cents(String reais) {
-		String normalized = reais.strip().replace(".", "").replace(',', '.');
-		java.math.BigDecimal value = new java.math.BigDecimal(normalized)
-				.setScale(2, java.math.RoundingMode.UNNECESSARY);
-		return value.movePointRight(2).longValueExact();
 	}
 
 }

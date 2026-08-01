@@ -1,6 +1,10 @@
 package com.luiz.splitpix.web;
 
 import com.luiz.splitpix.common.ApiException;
+import com.luiz.splitpix.common.ConflictException;
+import com.luiz.splitpix.common.ForbiddenException;
+import com.luiz.splitpix.common.NotFoundException;
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.Locale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,12 +19,9 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 
 /**
  * The page equivalent of the API error contract: the same codes resolve to the
- * same pt-BR messages, rendered as HTML instead of JSON.
- *
- * Stale suggestions are normal, not exceptional — an expense recorded by anyone
- * else invalidates the payment you were looking at (design doc 12.6) — so a
- * conflict returns the user to the group page with an explanation and freshly
- * computed numbers rather than to an error screen.
+ * same pt-BR messages and the same HTTP statuses, rendered as HTML instead of
+ * JSON. The status matters even for a human-facing page — monitoring, caches
+ * and browsers all treat a 200 error page as success.
  */
 @Order(Ordered.HIGHEST_PRECEDENCE)
 @ControllerAdvice(basePackageClasses = GroupPageController.class)
@@ -36,7 +37,8 @@ class PageExceptionHandler {
 	}
 
 	@ExceptionHandler(ApiException.class)
-	String handleApiException(ApiException e, Model model) {
+	String handleApiException(ApiException e, Model model, HttpServletResponse response) {
+		response.setStatus(statusOf(e).value());
 		model.addAttribute("codigo", e.code());
 		model.addAttribute("mensagem", messageSource.getMessage("error." + e.code(), null, PT_BR));
 		return "erro";
@@ -49,6 +51,15 @@ class PageExceptionHandler {
 		model.addAttribute("codigo", "INTERNAL_ERROR");
 		model.addAttribute("mensagem", messageSource.getMessage("error.INTERNAL_ERROR", null, PT_BR));
 		return "erro";
+	}
+
+	private static HttpStatus statusOf(ApiException e) {
+		return switch (e) {
+			case NotFoundException ignored -> HttpStatus.NOT_FOUND;
+			case ForbiddenException ignored -> HttpStatus.FORBIDDEN;
+			case ConflictException ignored -> HttpStatus.CONFLICT;
+			default -> HttpStatus.BAD_REQUEST;
+		};
 	}
 
 }

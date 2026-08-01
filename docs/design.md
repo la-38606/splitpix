@@ -103,7 +103,7 @@ sequenceDiagram
     participant B as BalanceRepository
     participant R as SettlementRepository
     C->>S: complete(groupId, token, key, request)
-    S->>G: requireGroup (token check)
+    S->>S: requireGroup via GroupService (token check)
     S->>G: lockById (SELECT … FOR UPDATE)
     S->>R: findByGroupIdAndIdempotencyKey
     alt key already applied
@@ -119,7 +119,7 @@ sequenceDiagram
 
 ### 3.3 Read path
 
-Reads take no lock. `GET /balances` runs the single aggregate of §4.3; `GET /suggested-payments` runs that aggregate and feeds the result to `DebtSimplifier.simplify`; `GET /activity` runs one `UNION ALL` over expenses and settlements. Because each is a single statement, each response is internally consistent by construction.
+Reads take no lock. `GET /balances` runs the single aggregate of §4.3; `GET /suggested-payments` runs that aggregate and feeds the result to `DebtSimplifier.simplify`; `GET /activity` runs one `UNION ALL` over expenses and settlements. Balances and activity are single statements and therefore internally consistent by construction; the suggested-payments path adds a second read for the recipients' Pix keys, whose only failure mode is a missing key rendered as absent.
 
 ---
 
@@ -133,7 +133,7 @@ Reads take no lock. `GET /balances` runs the single aggregate of §4.3; `GET /su
 
 **Alternatives rejected.** Layer-first packaging (`controllers/`, `services/`, `repositories/`) was rejected because every change to a feature would touch three distant directories, and because it provides no encapsulation boundary — everything is public to everything. A hexagonal/ports-and-adapters arrangement was rejected as disproportionate: there is exactly one inbound adapter family (HTTP) and one outbound (JDBC), so the indirection would buy nothing.
 
-**Consequences.** A contributor adding a feature creates one package (§5). The cost is that cross-feature reuse is by direct dependency — `ExpenseService` imports `GroupRepository` and `ParticipantRepository` — so package dependencies form a graph rather than a strict hierarchy. That graph is currently acyclic with `common` as a sink.
+**Consequences.** A contributor adding a feature creates one package (§5). The cost is that cross-feature reuse is by direct dependency — `ExpenseService` imports `GroupRepository` and `ParticipantRepository` — so package dependencies form a graph rather than a strict hierarchy. The graph contains one deliberate cycle: `group` and `participant` depend on each other (`GroupService` inserts the creator participant; `ParticipantService` uses the group's token check and lock), reflecting that a group cannot exist without its creator. `common` is a sink — it imports nothing from the application.
 
 ### 4.2 Concurrency: one lock per group, held by every write
 
@@ -177,7 +177,7 @@ Reads take no lock. `GET /balances` runs the single aggregate of §4.3; `GET /su
 
 **Alternatives rejected.** Key-only idempotency — the earlier design — was rejected once the browser UI existed: editing a form after submission and resubmitting reuses the key with different content, and returning the original record reports success while discarding the user's correction. Silent data loss is worse than a conflict the user can act on. Hashing the raw request bytes was rejected because whitespace or share ordering would produce spurious conflicts.
 
-**Consequences.** The hash must cover exactly the fields that change meaning; a field added to a request record without being added to the hash creates a silent hole (§8, A4).
+**Consequences.** The hash must cover exactly the fields that change meaning; a field added to a request record without being added to the hash creates a silent hole (§8, A4). In the browser, every form POST additionally follows Post/Redirect/Get, so a refresh re-issues a GET rather than a write; the idempotency key handles the retry and back-button cases PRG cannot.
 
 ### 4.6 Repayment simplification: greedy, on demand, never stored
 
@@ -201,7 +201,7 @@ Reads take no lock. `GET /balances` runs the single aggregate of §4.3; `GET /su
 
 **Alternatives rejected.** Editable expenses were rejected because an edit changes historical balances, which can retroactively invalidate settlements that were valid when they were made — the resulting reconciliation problem is larger than the feature is worth here.
 
-**Consequences.** No `PUT`/`PATCH`/`DELETE` exists on accounting rows. A participant's Pix key also cannot be edited (§9), which is a real gap rather than a considered decision — it is a consequence of never having built a participant-mutation path.
+**Consequences.** No `PUT`/`PATCH`/`DELETE` exists on accounting rows. A mistaken settlement cannot be reversed by an opposite settlement — invariants I4/I5 reject it, because the erroneous payer no longer owes anything — so the correction is a compensating *expense* (paid by the wrongly-recorded recipient, with the full share assigned to the wrongly-recorded payer), which restores both balances. A participant's Pix key also cannot be edited (§9), which is a real gap rather than a considered decision — it is a consequence of never having built a participant-mutation path.
 
 ### 4.9 Errors: stable machine codes, localized messages, database as backstop
 
@@ -277,7 +277,7 @@ splitpix/
 
 **Placement rule for new code.** Code that serves one domain concept goes in that concept's package, named `<Concept>Controller|Service|Repository` or a record for its request/response/result. Code used by two or more feature packages goes in `common` and must not depend on any feature package. Code that exists only to render HTML goes in `web`. A new domain concept gets a new package rather than an addition to an existing one.
 
-**Why `common` is a sink.** It holds the error contract and validators that every feature needs. Keeping its dependency set empty is what prevents the package graph from developing cycles.
+**Why `common` is a sink.** It holds the error contract and validators that every feature needs. Keeping its dependency set empty keeps the one existing cycle (`group` ↔ `participant`, §4.1) from spreading: shared utilities can never become a path between features.
 
 **Why `web` is separate from the feature packages.** The UI is a client of the services, exactly as the REST controllers are, and the REST API is the primary interface. Keeping page controllers out of the feature packages makes it structurally obvious that removing the UI would not touch the domain, and lets `PageExceptionHandler` be scoped by package (§4.9).
 
@@ -398,8 +398,9 @@ Violations here are silent and expensive. Nothing in the type system enforces th
 | Gap | Status and reason |
 |---|---|
 | Schema migrations | `CREATE TABLE IF NOT EXISTS` cannot evolve an existing database (§4.11). Flyway is the intended fix; deferred because every environment so far is disposable. |
-| Pix key editing | Not implemented. A key typed incorrectly can never be corrected, and that participant simply never appears as a payment recipient. This is the most user-visible gap. Participants are not accounting rows, so append-only (§4.8) does not forbid a mutation path — it was never built. |
+| Pix key editing | Not implemented. A key typed incorrectly can never be corrected: a wrong key appears in full on every payment instruction, and a participant with no key appears as a recipient with the key shown as absent. This is the most user-visible gap. Participants are not accounting rows, so append-only (§4.8) does not forbid a mutation path — it was never built. |
 | Participant removal | Not implemented; the deferred foreign key on `expense_shares` deliberately makes a raw delete fail rather than silently corrupt balances. |
+| Group and participant creation idempotency | The browser forms for creating a group and adding a participant carry no idempotency key, and the corresponding endpoints accept none — a back-button resubmission duplicates the participant (the expense and settlement paths are protected). |
 | Rate limiting and abuse controls | Absent. `POST /api/v1/groups` is unauthenticated by design, so a public deployment needs per-IP limits and caps before exposure. |
 | Public hosting | Not deployed. Preconditions: migrations, rate limiting, a declared data-retention posture (Pix keys are personal data), and confirmation that no invite token reaches platform access logs. |
 | Group-existence oracle | `GET` returns 404 before checking the token, so an unauthenticated caller can distinguish existing from non-existent group ids. Accepted: ids are random UUIDs and existence alone reveals nothing. |

@@ -23,7 +23,7 @@ docker compose up -d          # PostgreSQL 16 on :5432
 Run the tests (Testcontainers starts its own throwaway PostgreSQL — no setup):
 
 ```bash
-./mvnw verify                 # 143 tests
+./mvnw verify                 # 149 tests
 ```
 
 > The schema is applied from `schema.sql` with `CREATE TABLE IF NOT EXISTS`, so it only ever initializes an **empty** database. After pulling a schema change, recreate the volume: `docker compose down -v && docker compose up -d`. Flyway migrations replace this before the app is ever hosted.
@@ -102,7 +102,7 @@ Packages mirror features rather than layers: `group`, `participant`, `expense`, 
 
 ### Money
 
-Every monetary value is an integer number of centavos (`long` / `BIGINT`). Floating point never touches a stored amount. Amounts are capped at 10¹² centavos so a group's aggregate always fits in a `long` on the way back out.
+Every monetary value is an integer number of centavos (`long` / `BIGINT`). Floating point never touches a stored amount. Amounts are capped at 10¹² centavos so a group's aggregate stays representable as a `long` on the way back out.
 
 ### Balances are derived, never stored
 
@@ -119,7 +119,7 @@ One source of truth means balance drift is impossible by construction, and the i
 
 ### Concurrency: one lock per group
 
-Both write paths — expense creation and settlement completion — take the same row lock before doing anything:
+Every write inside a group — expense creation, settlement completion, and participant addition — takes the same row lock before doing anything:
 
 ```sql
 SELECT id FROM groups WHERE id = ? FOR UPDATE;
@@ -190,7 +190,7 @@ A server-rendered Thymeleaf UI ships alongside the API at `/` (create a group) a
 Two details worth knowing:
 
 - **The invite token never appears in a page URL.** Opening `/g/{id}?token=…` exchanges the token for an `HttpOnly`, `SameSite=Lax` cookie scoped to that group's path and redirects to the token-free URL, keeping the only credential in the system out of browser history, `Referer` headers, server access logs, and chat-app link previews. `SameSite=Lax` is also the CSRF defense, which is sufficient here because the cookie is the only credential.
-- **Every write is Post/Redirect/Get** with an idempotency key minted when the form renders, so a refresh cannot resubmit and an edited resubmission is a conflict rather than lost data.
+- **Every write is Post/Redirect/Get**, so a refresh cannot resubmit. The expense and mark-as-paid forms additionally carry an idempotency key minted at render time, so an edited resubmission is a conflict rather than lost data; the group and participant forms are PRG-only.
 
 Pix keys are masked in the participant list (`l•••@example.com`) and shown in full only on the payment instruction, where the payer needs to copy them.
 
@@ -210,12 +210,19 @@ Every error response is `{"code": "...", "message": "..."}`. Codes are stable En
 | Pix key already used in the group | 409 | `DUPLICATE_PIX_KEY` |
 | Settlement exceeds the current debt | 409 | `SETTLEMENT_EXCEEDS_DEBT` |
 | Idempotency key reused with different content | 409 | `IDEMPOTENCY_CONFLICT` |
+| Invalid expense total / share / settlement amount | 400 | `INVALID_EXPENSE_TOTAL`, `INVALID_SHARE_AMOUNT`, `INVALID_SETTLEMENT_AMOUNT` |
+| Participant repeated in the split | 400 | `DUPLICATE_SHARE_PARTICIPANT` |
+| Payer and recipient are the same participant | 400 | `INVALID_SETTLEMENT_PARTICIPANTS` |
+| Pix key type and value not given together | 400 | `INVALID_PIX_KEY_PAIR` |
+| Wrong method / content type / unknown path | 405 / 415 / 404 | `METHOD_NOT_ALLOWED`, `UNSUPPORTED_MEDIA_TYPE`, `RESOURCE_NOT_FOUND` |
+| Constraint caught behind the service checks | 409 | `CONSTRAINT_VIOLATION` |
+| Unexpected failure | 500 | `INTERNAL_ERROR` |
 
 ---
 
 ## Tests
 
-143 tests, all against real PostgreSQL through Testcontainers, run on every push by GitHub Actions. They are organised around the accounting invariants rather than around endpoints:
+149 tests, all against real PostgreSQL through Testcontainers, run by GitHub Actions on every push to main and every pull request. They are organised around the accounting invariants rather than around endpoints:
 
 - **Zero-sum** — group balances always sum to zero, across multiple expenses and settlements.
 - **Allocation** — an expense's shares always equal its total; violations persist nothing.
@@ -235,11 +242,11 @@ The suite has been audited by mutation: production code was deliberately broken 
 These are deliberate MVP boundaries, not oversights:
 
 - **Invite-token access, not authentication.** Anyone holding a group's token can read and write that group. There are no user accounts, no per-participant identity, and no authorization rules.
-- **Append-only.** Expenses and settlements are never edited or deleted; corrections are made by recording an opposite settlement. There is no endpoint to remove a participant, and a participant's Pix key cannot be edited once set.
+- **Append-only.** Expenses and settlements are never edited or deleted; a mistaken settlement is corrected with a compensating expense (an opposite settlement would itself be rejected by the over-settlement guard). There is no endpoint to remove a participant, and a participant's Pix key cannot be edited once set.
 - **Suggested payments are ephemeral.** They are recomputed per request and go stale the moment anyone records an expense; the client submits payer, recipient and amount when settling.
 - **CPF Pix keys are excluded** on purpose — a national identifier behind a link-shared access model is a privacy liability with no upside here. `EMAIL`, `PHONE` and `RANDOM` are supported, and keys are visible to everyone in the group.
 - **Schema changes need a fresh database** locally, as noted above.
-- **Not hardened for public hosting.** Rate limiting, request-hash idempotency, key masking and data-retention rules are specified in the hosting addendum and are not implemented here.
+- **Not hardened for public hosting.** Rate limiting, abuse caps and data-retention rules are catalogued as gaps in the design reference and are not implemented here.
 
 ## Language policy
 

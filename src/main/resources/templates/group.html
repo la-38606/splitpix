@@ -84,7 +84,7 @@
 							<input type="hidden" name="payerParticipantId" th:value="${pagamento.payerParticipantId()}">
 							<input type="hidden" name="recipientParticipantId" th:value="${pagamento.recipientParticipantId()}">
 							<input type="hidden" name="amountCents" th:value="${pagamento.amountCents()}">
-							<input type="hidden" name="idempotencyKey" th:value="${page.expenseIdempotencyKey() + '-' + pagamento.payerParticipantId()}">
+							<input type="hidden" name="idempotencyKey" th:value="${page.paymentIdempotencyKey() + '-' + pagamento.payerParticipantId() + '-' + pagamento.recipientParticipantId()}">
 							<button type="submit" class="botao-marcar" th:text="#{ui.acao.marcarPago}">marcar como pago</button>
 						</form>
 					</div>

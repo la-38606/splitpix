@@ -19,7 +19,7 @@ public record GroupPage(
 		Map<UUID, String> namesById,
 		long outstandingCents,
 		String expenseIdempotencyKey,
-		String participantIdempotencyKey) {
+		String paymentIdempotencyKey) {
 
 	public boolean settled() {
 		return payments.isEmpty();

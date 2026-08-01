@@ -70,6 +70,7 @@ class WebFlowTest extends ApiTestSupport {
 	void inviteLink_withWrongToken_showsErrorPage_andSetsNoCookie() throws Exception {
 		var group = createGroup();
 		mockMvc.perform(get("/g/" + group.get("groupId").asText()).param("token", "errado"))
+				.andExpect(status().isForbidden())
 				.andExpect(view().name("erro"))
 				.andExpect(cookie().doesNotExist(COOKIE))
 				.andExpect(content().string(org.hamcrest.Matchers.containsString("INVALID_INVITE_TOKEN")));
@@ -79,6 +80,7 @@ class WebFlowTest extends ApiTestSupport {
 	void groupPage_withoutCookie_showsErrorPage() throws Exception {
 		var group = createGroup();
 		mockMvc.perform(get("/g/" + group.get("groupId").asText()))
+				.andExpect(status().isForbidden())
 				.andExpect(view().name("erro"));
 	}
 
@@ -155,6 +157,7 @@ class WebFlowTest extends ApiTestSupport {
 				.param("totalReais", "80,00")
 				.param("share-" + creator, "40,00")
 				.param("share-" + other, "40,00"))
+				.andExpect(status().isConflict())
 				.andExpect(view().name("erro"))
 				.andExpect(content().string(org.hamcrest.Matchers.containsString("IDEMPOTENCY_CONFLICT")));
 
@@ -190,6 +193,78 @@ class WebFlowTest extends ApiTestSupport {
 		String withPayment = mockMvc.perform(get("/g/" + session.groupId()).cookie(session.cookie()))
 				.andReturn().getResponse().getContentAsString();
 		assertThat(withPayment).contains("luiz@example.com");
+	}
+
+	@Test
+	void onePayerOwingTwoCreditors_canMarkBothPaidFromOneRender() throws Exception {
+		// The greedy simplifier emits two payments from the SAME payer here; the
+		// two rendered forms must carry distinct idempotency keys or the second
+		// click dies with a spurious conflict.
+		Session session = createGroupViaForm();
+		addParticipantViaForm(session, "Ana");
+		addParticipantViaForm(session, "Bia");
+		String html = mockMvc.perform(get("/g/" + session.groupId()).cookie(session.cookie()))
+				.andReturn().getResponse().getContentAsString();
+		java.util.List<String> ids = shareIds(html);
+		String luiz = ids.get(0);
+		String ana = ids.get(1);
+		String bia = ids.get(2);
+
+		// Ana pays 60, Bia pays 40, everything consumed by Luiz: Luiz owes both.
+		mockMvc.perform(post("/g/" + session.groupId() + "/despesas")
+				.cookie(session.cookie())
+				.param("idempotencyKey", UUID.randomUUID().toString())
+				.param("description", "Mercado")
+				.param("paidByParticipantId", ana)
+				.param("totalReais", "60,00")
+				.param("share-" + luiz, "60,00"))
+				.andExpect(status().is3xxRedirection());
+		mockMvc.perform(post("/g/" + session.groupId() + "/despesas")
+				.cookie(session.cookie())
+				.param("idempotencyKey", UUID.randomUUID().toString())
+				.param("description", "Uber")
+				.param("paidByParticipantId", bia)
+				.param("totalReais", "40,00")
+				.param("share-" + luiz, "40,00"))
+				.andExpect(status().is3xxRedirection());
+
+		String page = mockMvc.perform(get("/g/" + session.groupId()).cookie(session.cookie()))
+				.andReturn().getResponse().getContentAsString();
+		java.util.List<java.util.Map<String, String>> forms = paymentForms(page);
+		assertThat(forms).hasSize(2);
+		assertThat(forms.get(0).get("idempotencyKey"))
+				.isNotEqualTo(forms.get(1).get("idempotencyKey"));
+
+		for (java.util.Map<String, String> form : forms) {
+			mockMvc.perform(post("/g/" + session.groupId() + "/pagamentos")
+					.cookie(session.cookie())
+					.param("payerParticipantId", form.get("payerParticipantId"))
+					.param("recipientParticipantId", form.get("recipientParticipantId"))
+					.param("amountCents", form.get("amountCents"))
+					.param("idempotencyKey", form.get("idempotencyKey")))
+					.andExpect(status().is3xxRedirection());
+		}
+
+		Integer settlements = jdbcTemplate.queryForObject(
+				"SELECT COUNT(*) FROM settlements WHERE group_id = ?::uuid", Integer.class, session.groupId());
+		assertThat(settlements).isEqualTo(2);
+	}
+
+	/** Extracts each payment form's hidden fields, in document order. */
+	private java.util.List<java.util.Map<String, String>> paymentForms(String html) {
+		java.util.List<java.util.Map<String, String>> forms = new java.util.ArrayList<>();
+		java.util.regex.Matcher form = java.util.regex.Pattern
+				.compile("(?s)<form method=\"post\"[^>]*pagamentos.*?</form>").matcher(html);
+		while (form.find()) {
+			java.util.Map<String, String> fields = new java.util.HashMap<>();
+			java.util.regex.Matcher field = java.util.regex.Pattern
+					.compile("name=\"([a-zA-Z]+)\" value=\"([^\"]+)\"").matcher(form.group());
+			while (field.find()) {
+				fields.put(field.group(1), field.group(2));
+			}
+			forms.add(fields);
+		}
+		return forms;
 	}
 
 	/** The creator is the first participant rendered; ids come from the share inputs. */

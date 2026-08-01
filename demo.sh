@@ -82,7 +82,7 @@ curl -sf "$API/ping" >/dev/null 2>&1 || {
 	exit 1
 }
 
-# --------------------------------------------------------------- 1. o grupo
+# ------------------------------------------------------- grupo (seções 1-2)
 
 section "1. Criando o grupo"
 request POST "$API/groups" '{
@@ -114,7 +114,7 @@ CLARA="$PARTICIPANT_ID"
 add_participant Diego PHONE '+5511999990004'
 DIEGO="$PARTICIPANT_ID"
 
-# ------------------------------------------------------------ 2. a despesa
+# ---------------------------------------------------- despesa (seções 3-4)
 
 section "3. Registrando a despesa (R\$ 420,00, divisão desigual)"
 EXPENSE_BODY="$(cat <<JSON
@@ -139,7 +139,7 @@ section "4. Reenviando a mesma requisição (idempotência)"
 request POST "$API/groups/$GROUP_ID/expenses?token=$TOKEN" "$EXPENSE_BODY" "despesa-jantar-001"
 printf 'Mesma chave de idempotência: HTTP %s (200 = despesa existente, nada duplicado)\n' "$STATUS"
 
-# -------------------------------------------------------------- 3. balanço
+# ---------------------------------------------------- balanço (seções 5-6)
 
 section "5. Saldos"
 request GET "$API/groups/$GROUP_ID/balances?token=$TOKEN"
@@ -162,7 +162,7 @@ for i in 0 1 2 3; do
 	printf '  %-6s paga %10s para %-6s (chave Pix: %s)\n' "$PAYER" "$(brl "$CENTS")" "$RECIPIENT" "$KEY"
 done
 
-# ----------------------------------------------------------- 4. quitação
+# --------------------------------------------------- quitação (seções 7-9)
 
 section "7. Ana confirma o pagamento de R\$ 90,00"
 request POST "$API/groups/$GROUP_ID/settlements?token=$TOKEN" \
