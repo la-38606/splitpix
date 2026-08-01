@@ -234,4 +234,4 @@ User-facing text — API error messages and `demo.sh` output — is **Brazilian 
 
 ## Design documents
 
-The full design document (`splitpix_design_doc_v2.pdf`) and the hosting/UI addendum ([`docs/design-addendum-v2.2-ui-hosting.md`](docs/design-addendum-v2.2-ui-hosting.md)) are in the repository. They record the decisions above with the alternatives that were rejected and why.
+[`docs/design.md`](docs/design.md) is the system design reference: components, boundaries, invariants, and the reasoning behind each load-bearing decision, including the alternatives that were rejected and why. `splitpix_design_doc_v2.pdf` is the original pre-implementation plan, kept for history; where it disagrees with the code, `docs/design.md` is correct.
