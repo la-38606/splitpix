@@ -23,7 +23,7 @@ docker compose up -d          # PostgreSQL 16 on :5432
 Run the tests (Testcontainers starts its own throwaway PostgreSQL — no setup):
 
 ```bash
-./mvnw verify                 # 138 tests
+./mvnw verify                 # 143 tests
 ```
 
 > The schema is applied from `schema.sql` with `CREATE TABLE IF NOT EXISTS`, so it only ever initializes an **empty** database. After pulling a schema change, recreate the volume: `docker compose down -v && docker compose up -d`. Flyway migrations replace this before the app is ever hosted.
@@ -131,7 +131,9 @@ Reads (balances, suggestions, history) take no lock. PostgreSQL's default `READ 
 
 ### Idempotency
 
-Expense and settlement creation both require an `Idempotency-Key` header, unique per group. A retry returns the original record with `200` instead of creating a second one (a first creation returns `201`), and the uniqueness constraint backs this up in the database. This is what makes a client retry after a timeout safe.
+Expense and settlement creation both require an `Idempotency-Key` header, unique per group. A retry with the same content returns the original record with `200` instead of creating a second one (a first creation returns `201`), and the uniqueness constraint backs this up in the database.
+
+Each row also stores a SHA-256 of the request, so reusing a key with *different* content is a `409 IDEMPOTENCY_CONFLICT` rather than a silent no-op. Without that, the browser back button — edit a submitted form, submit again — would return the original record and report success while discarding the correction. The hash ignores the order shares are listed in, so the same allocation submitted differently still replays.
 
 ### Repayment simplification
 
@@ -181,6 +183,17 @@ curl -X POST "localhost:8080/api/v1/groups/$GROUP_ID/expenses?token=$TOKEN" \
 
 Shares must sum to the total exactly, every participant must belong to the group, and no share may be negative — otherwise the whole request is rejected and nothing is written.
 
+## Browser UI
+
+A server-rendered Thymeleaf UI ships alongside the API at `/` (create a group) and `/g/{groupId}` (the group ledger: balances, suggested payments with copy-the-Pix-key and mark-as-paid, expense and participant forms, history). It is a client of the same services the REST API calls — no business logic lives in the page controllers.
+
+Two details worth knowing:
+
+- **The invite token never appears in a page URL.** Opening `/g/{id}?token=…` exchanges the token for an `HttpOnly`, `SameSite=Lax` cookie scoped to that group's path and redirects to the token-free URL, keeping the only credential in the system out of browser history, `Referer` headers, server access logs, and chat-app link previews. `SameSite=Lax` is also the CSRF defense, which is sufficient here because the cookie is the only credential.
+- **Every write is Post/Redirect/Get** with an idempotency key minted when the form renders, so a refresh cannot resubmit and an edited resubmission is a conflict rather than lost data.
+
+Pix keys are masked in the participant list (`l•••@example.com`) and shown in full only on the payment instruction, where the payer needs to copy them.
+
 ### Errors
 
 Every error response is `{"code": "...", "message": "..."}`. Codes are stable English identifiers; messages are Brazilian Portuguese.
@@ -196,12 +209,13 @@ Every error response is `{"code": "...", "message": "..."}`. Codes are stable En
 | Unknown group | 404 | `GROUP_NOT_FOUND` |
 | Pix key already used in the group | 409 | `DUPLICATE_PIX_KEY` |
 | Settlement exceeds the current debt | 409 | `SETTLEMENT_EXCEEDS_DEBT` |
+| Idempotency key reused with different content | 409 | `IDEMPOTENCY_CONFLICT` |
 
 ---
 
 ## Tests
 
-138 tests, all against real PostgreSQL through Testcontainers, run on every push by GitHub Actions. They are organised around the accounting invariants rather than around endpoints:
+143 tests, all against real PostgreSQL through Testcontainers, run on every push by GitHub Actions. They are organised around the accounting invariants rather than around endpoints:
 
 - **Zero-sum** — group balances always sum to zero, across multiple expenses and settlements.
 - **Allocation** — an expense's shares always equal its total; violations persist nothing.
@@ -221,7 +235,6 @@ The suite has been audited by mutation: production code was deliberately broken 
 These are deliberate MVP boundaries, not oversights:
 
 - **Invite-token access, not authentication.** Anyone holding a group's token can read and write that group. There are no user accounts, no per-participant identity, and no authorization rules.
-- **Retrying a key with a different body returns the original record.** Idempotency is keyed on `(group, key)` only; request hashing (which would make a changed body a conflict) is a planned follow-up.
 - **Append-only.** Expenses and settlements are never edited or deleted; corrections are made by recording an opposite settlement. There is no endpoint to remove a participant, and a participant's Pix key cannot be edited once set.
 - **Suggested payments are ephemeral.** They are recomputed per request and go stale the moment anyone records an expense; the client submits payer, recipient and amount when settling.
 - **CPF Pix keys are excluded** on purpose — a national identifier behind a link-shared access model is a privacy liability with no upside here. `EMAIL`, `PHONE` and `RANDOM` are supported, and keys are visible to everyone in the group.
