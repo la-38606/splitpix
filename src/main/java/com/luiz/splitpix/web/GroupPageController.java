@@ -85,9 +85,10 @@ public class GroupPageController {
 
 	@GetMapping("/g/{groupId}")
 	public String groupPage(@PathVariable UUID groupId, HttpServletRequest request, Model model) {
-		model.addAttribute("page", loadPage(groupId, InviteCookie.require(request)));
+		String token = InviteCookie.require(request);
+		model.addAttribute("page", loadPage(groupId, token));
 		model.addAttribute("keyTypes", PixKeyType.values());
-		model.addAttribute("inviteLink", inviteLink(request, groupId));
+		model.addAttribute("inviteLink", inviteLink(request, groupId, token));
 		return "group";
 	}
 
@@ -110,7 +111,7 @@ public class GroupPageController {
 		form.forEach((field, value) -> {
 			if (field.startsWith("share-") && !value.isBlank()) {
 				shares.add(new CreateExpenseRequest.ShareRequest(
-						UUID.fromString(field.substring("share-".length())), MoneyInput.parseCents(value)));
+						parseUuid(field.substring("share-".length())), MoneyInput.parseCents(value)));
 			}
 		});
 
@@ -150,15 +151,30 @@ public class GroupPageController {
 				UUID.randomUUID().toString(), UUID.randomUUID().toString());
 	}
 
-	private static String inviteLink(HttpServletRequest request, UUID groupId) {
+	/**
+	 * The full invite URL, token included — it is the thing being shared, so it
+	 * must carry the credential. It appears only inside the page body (visible
+	 * exclusively to someone already holding the token), never in a URL.
+	 */
+	private static String inviteLink(HttpServletRequest request, UUID groupId, String token) {
 		String base = request.getRequestURL().toString();
 		int path = base.indexOf("/g/");
-		return (path > 0 ? base.substring(0, path) : base) + "/g/" + groupId + "?token=";
+		return (path > 0 ? base.substring(0, path) : base) + "/g/" + groupId + "?token=" + token;
 	}
 
 	private static PixKeyType parseKeyType(String type, String value) {
 		return type == null || type.isBlank() || value == null || value.isBlank()
 				? null : PixKeyType.valueOf(type);
+	}
+
+	/** A malformed id in a form field is the client's mistake, not a server failure. */
+	private static UUID parseUuid(String value) {
+		try {
+			return UUID.fromString(value);
+		}
+		catch (IllegalArgumentException e) {
+			throw new com.luiz.splitpix.common.BadRequestException("VALIDATION_ERROR");
+		}
 	}
 
 	private static String emptyToNull(String value) {

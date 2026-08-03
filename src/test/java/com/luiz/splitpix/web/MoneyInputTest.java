@@ -37,6 +37,18 @@ class MoneyInputTest {
 	}
 
 	@Test
+	void zeroLedGrouping_isADecimalTypo_notThousands() {
+		// "0.500" is someone fat-fingering R$ 0,50 — reading it as R$ 500,00
+		// would be a 1000x misread. Grouped thousands never lead with zero.
+		assertThat(MoneyInput.parseCents("0.50")).isEqualTo(50L);
+		for (String input : new String[] { "0.500", "00.500", "0.123", "0.123,45" }) {
+			assertThatThrownBy(() -> MoneyInput.parseCents(input))
+					.as("input: %s", input)
+					.isInstanceOf(BadRequestException.class);
+		}
+	}
+
+	@Test
 	void ambiguousOrMalformedInput_isRejected_neverReinterpreted() {
 		for (String input : new String[] {
 				"", "  ", "abc", "1,2,3", "1.2.3", "1,234", "70.5.0",

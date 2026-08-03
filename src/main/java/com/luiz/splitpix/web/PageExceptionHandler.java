@@ -14,8 +14,10 @@ import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpStatus;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.ControllerAdvice;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 /**
  * The page equivalent of the API error contract: the same codes resolve to the
@@ -41,6 +43,15 @@ class PageExceptionHandler {
 		response.setStatus(statusOf(e).value());
 		model.addAttribute("codigo", e.code());
 		model.addAttribute("mensagem", messageSource.getMessage("error." + e.code(), null, PT_BR));
+		return "erro";
+	}
+
+	/** Client-side input mistakes (bad UUID in the URL, missing field) are 400s, not alerts. */
+	@ExceptionHandler({ MethodArgumentTypeMismatchException.class, MissingServletRequestParameterException.class })
+	@ResponseStatus(HttpStatus.BAD_REQUEST)
+	String handleBinding(Exception e, Model model) {
+		model.addAttribute("codigo", "INVALID_REQUEST");
+		model.addAttribute("mensagem", messageSource.getMessage("error.INVALID_REQUEST", null, PT_BR));
 		return "erro";
 	}
 

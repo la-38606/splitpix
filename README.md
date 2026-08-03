@@ -23,7 +23,7 @@ docker compose up -d          # PostgreSQL 16 on :5432
 Run the tests (Testcontainers starts its own throwaway PostgreSQL — no setup):
 
 ```bash
-./mvnw verify                 # 149 tests
+./mvnw verify                 # 162 tests
 ```
 
 > The schema is applied from `schema.sql` with `CREATE TABLE IF NOT EXISTS`, so it only ever initializes an **empty** database. After pulling a schema change, recreate the volume: `docker compose down -v && docker compose up -d`. Flyway migrations replace this before the app is ever hosted.
@@ -222,7 +222,7 @@ Every error response is `{"code": "...", "message": "..."}`. Codes are stable En
 
 ## Tests
 
-149 tests, all against real PostgreSQL through Testcontainers, run by GitHub Actions on every push to main and every pull request. They are organised around the accounting invariants rather than around endpoints:
+162 tests, all against real PostgreSQL through Testcontainers, run by GitHub Actions on every push to main and every pull request. They are organised around the accounting invariants rather than around endpoints:
 
 - **Zero-sum** — group balances always sum to zero, across multiple expenses and settlements.
 - **Allocation** — an expense's shares always equal its total; violations persist nothing.

@@ -16,10 +16,12 @@ import java.util.regex.Pattern;
  */
 final class MoneyInput {
 
+	// Grouped thousands never lead with a zero group: "0.500" is a decimal typo,
+	// and reinterpreting it as R$ 500,00 is the misread this class exists to prevent.
 	private static final Pattern COMMA_DECIMAL =
-			Pattern.compile("(\\d+|\\d{1,3}(\\.\\d{3})+),\\d{1,2}");
+			Pattern.compile("(\\d+|[1-9]\\d{0,2}(\\.\\d{3})+),\\d{1,2}");
 	private static final Pattern DOT_DECIMAL = Pattern.compile("\\d+\\.\\d{1,2}");
-	private static final Pattern DOT_GROUPED = Pattern.compile("\\d{1,3}(\\.\\d{3})+");
+	private static final Pattern DOT_GROUPED = Pattern.compile("[1-9]\\d{0,2}(\\.\\d{3})+");
 	private static final Pattern PLAIN = Pattern.compile("\\d+");
 
 	private MoneyInput() {

@@ -88,8 +88,8 @@ class WebFlowTest extends ApiTestSupport {
 	void fullBrowserLoop_fromCreationToSettlement() throws Exception {
 		Session session = createGroupViaForm();
 		addParticipantViaForm(session, "Ana");
+		addParticipantViaForm(session, "Bia");
 
-		// The rendered page carries a fresh idempotency key for the expense form.
 		MvcResult page = mockMvc.perform(get("/g/" + session.groupId()).cookie(session.cookie()))
 				.andExpect(status().isOk())
 				.andExpect(view().name("group"))
@@ -97,28 +97,35 @@ class WebFlowTest extends ApiTestSupport {
 		String html = page.getResponse().getContentAsString();
 		assertThat(html).contains("República").contains("Ana").contains("Luiz");
 
+		// Submit what the browser would submit: the key the page rendered, and
+		// an empty share field for Bia (real forms send every input).
 		mockMvc.perform(post("/g/" + session.groupId() + "/despesas")
 				.cookie(session.cookie())
-				.param("idempotencyKey", UUID.randomUUID().toString())
+				.param("idempotencyKey", expenseFormKey(html))
 				.param("description", "Mercado")
 				.param("paidByParticipantId", creatorIdOf(session, html))
 				.param("totalReais", "100,00")
 				.param("share-" + creatorIdOf(session, html), "50,00")
-				.param("share-" + otherIdOf(session, html), "50,00"))
+				.param("share-" + otherIdOf(session, html), "50,00")
+				.param("share-" + shareIds(html).get(2), ""))
 				.andExpect(status().is3xxRedirection());
 
-		// Balances and a suggested payment now render.
 		String withExpense = mockMvc.perform(get("/g/" + session.groupId()).cookie(session.cookie()))
 				.andExpect(status().isOk())
 				.andReturn().getResponse().getContentAsString();
-		assertThat(withExpense).contains("50,00").contains("luiz@example.com");
+		assertThat(withExpense).contains("luiz@example.com");
+		// The "Em aberto" headline is the sum of positive balances, not the
+		// zero-sum total.
+		assertThat(outstandingOf(withExpense)).isEqualTo("50,00");
 
+		// Complete the payment exactly as the rendered form would.
+		java.util.Map<String, String> payment = paymentForms(withExpense).get(0);
 		mockMvc.perform(post("/g/" + session.groupId() + "/pagamentos")
 				.cookie(session.cookie())
-				.param("idempotencyKey", UUID.randomUUID().toString())
-				.param("payerParticipantId", otherIdOf(session, withExpense))
-				.param("recipientParticipantId", creatorIdOf(session, withExpense))
-				.param("amountCents", "5000"))
+				.param("idempotencyKey", payment.get("idempotencyKey"))
+				.param("payerParticipantId", payment.get("payerParticipantId"))
+				.param("recipientParticipantId", payment.get("recipientParticipantId"))
+				.param("amountCents", payment.get("amountCents")))
 				.andExpect(status().is3xxRedirection());
 
 		String settled = mockMvc.perform(get("/g/" + session.groupId()).cookie(session.cookie()))
@@ -126,6 +133,103 @@ class WebFlowTest extends ApiTestSupport {
 				.andReturn().getResponse().getContentAsString();
 		// Everything is squared up, so the suggestions list gives way to its empty state.
 		assertThat(settled).contains("Tudo quitado");
+		assertThat(outstandingOf(settled)).isEqualTo("0,00");
+		// History renders newest first: the settlement row above the expense row.
+		// ">Pagamento<" is the history type cell; the "Pagamentos sugeridos"
+		// heading would match a bare "Pagamento" and make this vacuous.
+		assertThat(settled.indexOf(">Pagamento<")).isPositive();
+		assertThat(settled.indexOf(">Pagamento<")).isLessThan(settled.indexOf("Mercado"));
+	}
+
+	@Test
+	void inviteLinkCopiedFromThePage_letsAFreshClientJoin() throws Exception {
+		// The copy button carries the full invite URL, token included — it is
+		// the only way a second person joins through the browser.
+		Session session = createGroupViaForm();
+		String html = mockMvc.perform(get("/g/" + session.groupId()).cookie(session.cookie()))
+				.andReturn().getResponse().getContentAsString();
+
+		java.util.regex.Matcher link = java.util.regex.Pattern
+				.compile("data-copiar=\"([^\"]*\\?token=[^\"]+)\"").matcher(html);
+		assertThat(link.find()).as("copy button must carry the invite URL with its token").isTrue();
+
+		// A fresh client (no cookie) opening the copied link gets the cookie
+		// exchange and lands on the token-free page.
+		mockMvc.perform(get(link.group(1)))
+				.andExpect(status().is3xxRedirection())
+				.andExpect(header().string("Location", "/g/" + session.groupId()))
+				.andExpect(cookie().exists(COOKIE));
+	}
+
+	@Test
+	void inviteCookie_carriesItsProtectionAttributes() throws Exception {
+		var group = createGroup("Rio", "Luiz");
+		String setCookie = mockMvc.perform(get("/g/" + group.get("groupId").asText())
+				.param("token", group.get("inviteToken").asText())
+				.secure(true))
+				.andExpect(status().is3xxRedirection())
+				.andReturn().getResponse().getHeader("Set-Cookie");
+
+		assertThat(setCookie)
+				.contains("HttpOnly")
+				.contains("SameSite=Lax")
+				.contains("Max-Age=43200")
+				.contains("Secure")
+				.doesNotContain("Path=/;");
+	}
+
+	@Test
+	void clientInputMistakes_are400ErrorPages_notAlerts() throws Exception {
+		Session session = createGroupViaForm();
+
+		// Malformed group id in the URL.
+		mockMvc.perform(get("/g/not-a-uuid"))
+				.andExpect(status().isBadRequest())
+				.andExpect(view().name("erro"));
+
+		// Missing required form field.
+		mockMvc.perform(post("/g/" + session.groupId() + "/despesas")
+				.cookie(session.cookie())
+				.param("idempotencyKey", UUID.randomUUID().toString())
+				.param("description", "Mercado")
+				.param("paidByParticipantId", UUID.randomUUID().toString()))
+				.andExpect(status().isBadRequest())
+				.andExpect(view().name("erro"));
+
+		// A share field whose suffix is not a UUID.
+		mockMvc.perform(post("/g/" + session.groupId() + "/despesas")
+				.cookie(session.cookie())
+				.param("idempotencyKey", UUID.randomUUID().toString())
+				.param("description", "Mercado")
+				.param("paidByParticipantId", UUID.randomUUID().toString())
+				.param("totalReais", "10,00")
+				.param("share-notauuid", "10,00"))
+				.andExpect(status().isBadRequest())
+				.andExpect(view().name("erro"));
+	}
+
+	@Test
+	void unknownGroup_withACookie_isA404Page() throws Exception {
+		Session session = createGroupViaForm();
+		mockMvc.perform(get("/g/" + UUID.randomUUID()).cookie(session.cookie()))
+				.andExpect(status().isNotFound())
+				.andExpect(view().name("erro"));
+	}
+
+	/** The idempotency key the rendered expense form carries. */
+	private String expenseFormKey(String html) {
+		java.util.regex.Matcher matcher = java.util.regex.Pattern
+				.compile("(?s)despesas.*?name=\"idempotencyKey\" value=\"([^\"]+)\"").matcher(html);
+		assertThat(matcher.find()).as("expense form must render an idempotency key").isTrue();
+		return matcher.group(1);
+	}
+
+	/** The value inside the \"Em aberto\" headline. */
+	private String outstandingOf(String html) {
+		java.util.regex.Matcher matcher = java.util.regex.Pattern
+				.compile("(?s)cifra-grande.*?</span><span[^>]*>([^<]+)</span>").matcher(html);
+		assertThat(matcher.find()).as("balance band must render").isTrue();
+		return matcher.group(1);
 	}
 
 	@Test

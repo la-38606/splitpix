@@ -251,6 +251,28 @@ class SchemaConstraintTest {
 	}
 
 	@Test
+	void requestHash_isMandatoryOnBothIdempotentTables() {
+		// A NULL hash would NPE every replay of that key instead of replaying.
+		UUID groupId = insertGroup();
+		UUID payer = insertParticipant(groupId, null);
+		UUID recipient = insertParticipant(groupId, null);
+
+		assertThatThrownBy(() -> jdbcTemplate.update("""
+				INSERT INTO expenses (id, group_id, paid_by_participant_id, description, total_cents,
+				                      idempotency_key, request_hash)
+				VALUES (?, ?, ?, ?, ?, ?, NULL)
+				""", UUID.randomUUID(), groupId, payer, "d", 100L, "k-nullhash"))
+				.isInstanceOf(DataIntegrityViolationException.class);
+
+		assertThatThrownBy(() -> jdbcTemplate.update("""
+				INSERT INTO settlements (id, group_id, payer_participant_id, recipient_participant_id,
+				                         amount_cents, idempotency_key, request_hash, status)
+				VALUES (?, ?, ?, ?, ?, ?, NULL, 'COMPLETED')
+				""", UUID.randomUUID(), groupId, payer, recipient, 100L, "s-nullhash"))
+				.isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
 	void deletingGroup_cascadesThroughFullGraph() {
 		UUID groupId = insertGroup();
 		UUID payer = insertParticipant(groupId, null);

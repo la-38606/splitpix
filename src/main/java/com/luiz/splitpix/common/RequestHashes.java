@@ -24,7 +24,9 @@ public final class RequestHashes {
 	public static String of(Object... parts) {
 		StringBuilder canonical = new StringBuilder();
 		for (Object part : parts) {
-			String value = String.valueOf(part);
+			// NUL is unreachable from real field values, so null can never
+			// collide with the four-character string "null".
+			String value = part == null ? "\u0000" : String.valueOf(part);
 			canonical.append(value.length()).append(':').append(value).append('|');
 		}
 		try {
