@@ -24,6 +24,10 @@ stored.
 - **Exact minimum-transfer search.** Exponential in the worst case, and for a
   five-to-ten-person group the greedy result is already at or near optimal.
   Correctness of the accounting does not depend on transfer count.
+  *(Later note: the "at or near optimal" judgment did not survive contact
+  with a counterexample — a five-person group where greedy needs four
+  transfers and three suffice. ADR 0008 revisits this and adds the exact
+  strategies.)*
 - **Storing suggestions as obligations.** Any new expense invalidates them;
   stored obligations would need invalidation logic and could go stale between
   generation and payment. On-demand generation makes staleness impossible to
