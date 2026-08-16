@@ -37,6 +37,7 @@ public class ParticipantService {
 		String displayName = Texts.cleanName(request.displayName());
 		String pixKeyValue = PixKeys.normalize(request.pixKeyType(), request.pixKeyValue());
 		PixKeys.validatePair(request.pixKeyType(), pixKeyValue);
+		PixKeys.validateFormat(request.pixKeyType(), pixKeyValue);
 
 		if (pixKeyValue != null && participantRepository.pixKeyExistsInGroup(groupId, pixKeyValue)) {
 			throw new ConflictException("DUPLICATE_PIX_KEY");

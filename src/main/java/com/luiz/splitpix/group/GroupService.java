@@ -32,6 +32,7 @@ public class GroupService {
 		String creatorName = Texts.cleanName(request.creatorName());
 		String pixKeyValue = PixKeys.normalize(request.pixKeyType(), request.pixKeyValue());
 		PixKeys.validatePair(request.pixKeyType(), pixKeyValue);
+		PixKeys.validateFormat(request.pixKeyType(), pixKeyValue);
 
 		UUID groupId = UUID.randomUUID();
 		UUID creatorId = UUID.randomUUID();

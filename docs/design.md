@@ -301,7 +301,7 @@ splitpix/
 
 `PixKeyType` — enum of `EMAIL`, `PHONE`, `RANDOM`. CPF is deliberately absent: storing a national identifier behind a link-shared access model is a privacy liability with no upside for this system. The enum's absence of a CPF constant is what makes a CPF request a 400 rather than a stored value.
 
-`PixKeys` — normalization and the paired-nullability rule. Lowercases `EMAIL` keys because Pix DICT treats email keys case-insensitively, so without it two participants could hold the same effective key. Re-checks length after normalization because lowercasing can lengthen a string.
+`PixKeys` — normalization, the paired-nullability rule, and per-type shape validation. Lowercases `EMAIL` and `RANDOM` keys because Pix DICT treats both case-insensitively, so without it two participants could hold the same effective key; re-checks length after normalization because lowercasing can lengthen a string. `validateFormat` requires an email shape for `EMAIL`, E.164 for `PHONE`, and a UUID for `RANDOM` — pragmatic shapes rather than DICT verification, enough to catch a key pasted into the wrong field or a CPF smuggled under `RANDOM` (an EVP key is a UUID, so bare digits never match).
 
 `ParticipantService` — validates, takes the group lock (§4.2), pre-checks duplicate keys for a friendly error, and maps a `DuplicateKeyException` from the losing side of a race to the same `DUPLICATE_PIX_KEY` code so the contract is timing-independent.
 

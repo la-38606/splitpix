@@ -60,6 +60,43 @@ class ParticipantApiTest extends ApiTestSupport {
 	}
 
 	@Test
+	void pixKeyFormat_isValidatedPerType() throws Exception {
+		// EMAIL without a domain, PHONE without E.164 shape, RANDOM that is not
+		// a UUID (including bare CPF digits smuggled under RANDOM) — all 400.
+		String[][] invalid = {
+				{ "EMAIL", "not-an-email" },
+				{ "EMAIL", "a@b" },
+				{ "PHONE", "11999990000" },
+				{ "PHONE", "+0119999" },
+				{ "PHONE", "telefone" },
+				{ "RANDOM", "12345678900" },
+				{ "RANDOM", "not-a-uuid" },
+		};
+		for (String[] pair : invalid) {
+			postParticipant(groupId, token, """
+					{"displayName": "Zed", "pixKeyType": "%s", "pixKeyValue": "%s"}
+					""".formatted(pair[0], pair[1]))
+					.andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.code").value("INVALID_PIX_KEY_FORMAT"));
+		}
+	}
+
+	@Test
+	void randomKeys_areUuids_andCollideCaseInsensitively() throws Exception {
+		postParticipant(groupId, token, """
+				{"displayName": "Ana", "pixKeyType": "RANDOM",
+				 "pixKeyValue": "A1B2C3D4-0000-4000-8000-000000000001"}
+				""").andExpect(status().isCreated());
+
+		postParticipant(groupId, token, """
+				{"displayName": "Bruno", "pixKeyType": "RANDOM",
+				 "pixKeyValue": "a1b2c3d4-0000-4000-8000-000000000001"}
+				""")
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("DUPLICATE_PIX_KEY"));
+	}
+
+	@Test
 	void addParticipant_withoutPixKey_isAllowed() throws Exception {
 		postParticipant(groupId, token, """
 				{"displayName": "Clara"}

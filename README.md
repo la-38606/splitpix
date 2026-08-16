@@ -214,6 +214,7 @@ Every error response is `{"code": "...", "message": "..."}`. Codes are stable En
 | Participant repeated in the split | 400 | `DUPLICATE_SHARE_PARTICIPANT` |
 | Payer and recipient are the same participant | 400 | `INVALID_SETTLEMENT_PARTICIPANTS` |
 | Pix key type and value not given together | 400 | `INVALID_PIX_KEY_PAIR` |
+| Pix key does not match its type's shape | 400 | `INVALID_PIX_KEY_FORMAT` |
 | Wrong method / content type / unknown path | 405 / 415 / 404 | `METHOD_NOT_ALLOWED`, `UNSUPPORTED_MEDIA_TYPE`, `RESOURCE_NOT_FOUND` |
 | Constraint caught behind the service checks | 409 | `CONSTRAINT_VIOLATION` |
 | Unexpected failure | 500 | `INTERNAL_ERROR` |
