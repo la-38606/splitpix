@@ -263,6 +263,9 @@ body {
 	width: 100%;
 	border-collapse: collapse;
 	font-size: 14px;
+	/* Fixed layout so the table can never force the page wider than the
+	   viewport: the description column absorbs and wraps. */
+	table-layout: fixed;
 }
 
 .livro td {
@@ -271,10 +274,10 @@ body {
 	vertical-align: baseline;
 }
 
-.livro-tipo { width: 6.5rem; white-space: nowrap; }
+.livro-tipo { width: 5.5rem; white-space: nowrap; }
 .livro-descricao { font-family: var(--serif); font-size: 17px; overflow-wrap: anywhere; }
 .livro-quem { width: 8rem; }
-.livro-valor { text-align: right; white-space: nowrap; }
+.livro-valor { width: 5.5rem; text-align: right; white-space: nowrap; }
 
 /* ---------------------------------------------------------------- formulários */
 
@@ -496,6 +499,9 @@ button:focus-visible, a:focus-visible {
 
 @media (max-width: 860px) {
 	.colunas { grid-template-columns: 1fr; }
+
+	/* The who-paid column is secondary; the amount is not. */
+	.livro-quem { display: none; }
 
 	.rail {
 		border-left: 0;
