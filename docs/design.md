@@ -1,9 +1,13 @@
 # SplitPix — System Design Reference
 
-**Version:** 3.0 · **Date:** 2026-08-01 · **Status:** current
+**Version:** 4.0 · **Date:** 2026-08-16 · **Status:** current
 **Scope:** the design of the SplitPix group-expense service as implemented — components, boundaries, invariants, and the reasoning behind each load-bearing decision.
 
-This document supersedes `splitpix_design_doc_v2.pdf` (v2.1, a pre-implementation plan) and the v2.2 hosting/UI addendum, whose still-relevant content is folded in. Where the earlier documents conflict with the code, the code wins and the conflict is corrected here.
+Version 4.0 adds the settlement optimization engine (§10), balance provenance
+(§11), and the comparison against a conventional expense-sharing design
+(§12). Where any earlier document conflicts with the code, the code wins and
+the conflict is corrected here. The distributable PDF is generated from this
+file (`scripts/build-design-doc.sh`).
 
 ---
 
@@ -18,6 +22,9 @@ This document supersedes `splitpix_design_doc_v2.pdf` (v2.1, a pre-implementatio
 7. [Interfaces and boundaries](#7-interfaces-and-boundaries)
 8. [Invariants and assumptions](#8-invariants-and-assumptions)
 9. [Known gaps and future work](#9-known-gaps-and-future-work)
+10. [The settlement optimization engine](#10-the-settlement-optimization-engine)
+11. [Balance provenance](#11-balance-provenance)
+12. [Against a conventional expense-sharing design](#12-against-a-conventional-expense-sharing-design)
 - [Appendix A: glossary](#appendix-a-glossary)
 
 ---
@@ -28,7 +35,7 @@ This document supersedes `splitpix_design_doc_v2.pdf` (v2.1, a pre-implementatio
 
 A group shares costs: one person pays for dinner, another buys groceries, a third covers the taxi. Settling up by hand means reconstructing who paid what, computing each person's net position, and agreeing on who transfers money to whom. In Brazil the transfer itself is easy — Pix is instant and free — so the friction is entirely in the accounting and the coordination, not the payment.
 
-SplitPix records the shared expenses, derives each participant's net balance, reduces the resulting web of debts to a small set of transfers, and tracks which of those transfers have been completed. It produces, for each debtor, a recipient, an exact amount, and the recipient's Pix key.
+SplitPix records the shared expenses, derives each participant's net balance, and turns the resulting web of debts into a settlement plan — for each debtor, a recipient, an exact amount, and the recipient's Pix key. The word *a* in "a settlement plan" is doing real work: many different transfer graphs leave every participant at exactly zero, and they differ in ways a group can care about — how many payments there are, and whether money moves between people who never transacted. SplitPix treats the choice among those graphs as an explicit optimization problem with selectable strategies (§10), and can explain both any balance (§11) and any plan it proposes.
 
 ### 1.2 What operates it
 
@@ -36,9 +43,9 @@ A single Spring Boot application process plus one PostgreSQL database. There is 
 
 ### 1.3 What it produces
 
-- Net balances per participant, derived on demand (§4.3).
-- A minimized list of suggested payments, generated on demand and never stored (§4.6).
-- An append-only record of expenses and completed settlements.
+- Net balances per participant, derived on demand (§4.3), each explainable down to its ledger entries (§11).
+- Settlement plans under three strategies, generated on demand and never stored (§4.6, §10), each stamped with the ledger revision it was derived from.
+- An append-only record of expenses and completed settlements, with dense sequence numbers.
 
 ### 1.4 Explicitly out of scope
 
@@ -60,6 +67,8 @@ Ranked. Each subsequent decision in §4 traces to a goal here; where two goals c
 
 **G5. Explicitness over convenience.** SQL is written, not generated; transaction boundaries and locks are visible in the code that depends on them. Accepted cost: more mapping code (§4.10).
 
+**G6. The system explains its own outputs.** A balance can be decomposed into the ledger entries that produced it, with the decomposition verified against the balance at runtime (§11); a plan states its strategy, whether its optimality is proven, and what each transfer costs in new payment relationships (§10). Claims the system cannot prove — greedy optimality, for one — are never made.
+
 **Accepted costs.** Throughput within a single group is deliberately sacrificed (§4.2). Balance reads are recomputed rather than cached (§4.3). The access model is weak by construction (§4.7). These are consequences of the ranking above, not oversights.
 
 ---
@@ -74,7 +83,7 @@ Ranked. Each subsequent decision in §4 traces to a goal here; where two goals c
 | Page controller (`GroupPageController`) | Same, for server-rendered HTML; holds no business logic |
 | Services (`*Service`) | Business rules, transaction boundaries, locking, idempotency |
 | Repositories (`*Repository`) | SQL execution, row mapping, explicit row locking |
-| `DebtSimplifier` | Pure function: balances in, transfers out; no Spring, no I/O |
+| `settlement.plan` package | The optimization engine: `SettlementPlanner` dispatch, `GreedyOptimizer`, `ExactPlanSearch`, `PlanInvariants`; pure functions, no Spring, no I/O (§10) |
 | Error advices (`GlobalExceptionHandler`, `PageExceptionHandler`) | Exception → status code + `{code, message}` or HTML |
 | PostgreSQL | Durable state, constraint enforcement, write serialization |
 
@@ -119,7 +128,7 @@ sequenceDiagram
 
 ### 3.3 Read path
 
-Reads take no lock. `GET /balances` runs the single aggregate of §4.3; `GET /suggested-payments` runs that aggregate and feeds the result to `DebtSimplifier.simplify`; `GET /activity` runs one `UNION ALL` over expenses and settlements. Balances and activity are single statements and therefore internally consistent by construction; the suggested-payments path adds a second read for the recipients' Pix keys, whose only failure mode is a missing key rendered as absent.
+Reads take no lock. `GET /balances` runs the single aggregate of §4.3; `GET /activity` runs one `UNION ALL` over expenses and settlements. Both are single statements and therefore internally consistent by construction. The plan and explanation endpoints read several things — balances, relationships, Pix keys, the ledger revision — so each runs as one `REPEATABLE_READ` transaction: every read sees the same snapshot, and a plan's stamped revision genuinely describes the state it was derived from, even while writers are committing.
 
 ---
 
@@ -179,13 +188,13 @@ Reads take no lock. `GET /balances` runs the single aggregate of §4.3; `GET /su
 
 **Consequences.** The hash must cover exactly the fields that change meaning; a field added to a request record without being added to the hash creates a silent hole (§8, A4). In the browser, every form POST additionally follows Post/Redirect/Get, so a refresh re-issues a GET rather than a write; the idempotency key handles the retry and back-button cases PRG cannot.
 
-### 4.6 Repayment simplification: greedy, on demand, never stored
+### 4.6 Settlement plans: derived, strategy-selectable, never stored
 
-**Decision.** `DebtSimplifier.simplify` repeatedly matches the largest debtor with the largest creditor using two priority queues, transferring the smaller of the two magnitudes. Suggestions are computed per request and never persisted.
+**Decision.** A settlement plan is a pure derivation — current balances, plus a strategy, plus optional constraints — computed per request and never persisted. Three strategies exist (GREEDY, MIN_TRANSFERS, RELATIONSHIP_AWARE); §10 specifies each one. Every plan is stamped with the group's ledger revision (the count of accounting entries), so a caller can tell whether the ledger has moved since the plan was generated.
 
-**Alternatives rejected.** Exact minimization of the transfer count is NP-hard; the greedy algorithm guarantees at most n−1 transfers, which is already small for real groups. Storing suggestions as obligations was rejected because any new expense invalidates them, and stale stored obligations would then need invalidation logic — complexity that on-demand generation removes entirely.
+**Alternatives rejected.** Storing suggestions as obligations was rejected because any new expense invalidates them, and stale stored obligations would then need invalidation logic — complexity that on-demand generation removes entirely. A single hardcoded algorithm — the original design — was rejected once it was clear that several valid transfer graphs settle the same balances and differ in ways users care about (ADR 0008); baking one choice in hides a decision the group should own.
 
-**Consequences.** Suggested payments have no identity, so completing one requires the client to submit payer, recipient and amount. A suggestion can go stale between render and submission; the settlement path re-validates and rejects with 409 rather than trusting the client. Tie-breaking is by participant id so output is deterministic for a given input (§7.3).
+**Consequences.** Suggested payments have no identity, so completing one requires the client to submit payer, recipient and amount. A suggestion can go stale between render and submission; the settlement path re-validates under the group lock and rejects with 409 rather than trusting the client. Every strategy is deterministic for a given input, so equal ledger states produce byte-equal plans.
 
 ### 4.7 Access control: invite token, not authentication
 
@@ -260,18 +269,22 @@ splitpix/
 │   ├── group/                       group creation, invite token, group view
 │   ├── participant/                 participants, Pix key types and normalization
 │   ├── expense/                     expense creation transaction
-│   ├── balance/                     balance aggregate, DebtSimplifier, suggestions
+│   ├── balance/                     balance aggregate, balance explanation (§11)
 │   ├── settlement/                  settlement transaction
-│   ├── activity/                    combined history read
+│   │   └── plan/                    the optimization engine (§10): strategies,
+│   │                                search core, constraints, plan invariants,
+│   │                                relationship graph, plan service + API
+│   ├── activity/                    the ledger read: sequences and revision
 │   └── web/                         server-rendered UI; no business logic
 ├── src/main/resources/
 │   ├── schema.sql                   all tables and constraints (§4.11)
 │   ├── messages.properties          every user-facing string, pt-BR
 │   ├── application.properties       datasource, Jackson limits, SQL init
-│   ├── templates/                   Thymeleaf: home, group, erro
+│   ├── templates/                   Thymeleaf: home, group, planos, extrato, erro
 │   └── static/                      splitpix.css, copiar.js
-├── src/test/java/com/luiz/splitpix/  one flat package plus web/; see §7.4
-├── demo.sh                          end-to-end walk-through against a running instance
+├── src/test/java/com/luiz/splitpix/  API tests, plus settlement/plan/ and web/ unit tests
+├── demo.sh                          walk-through; --tecnico adds the optimizer act
+├── scripts/build-design-doc.sh      regenerates the design PDF from this file
 └── docs/
     ├── design.md                    this document
     ├── adr/                         one record per load-bearing decision
@@ -318,19 +331,19 @@ splitpix/
 
 ### 6.4 `balance`
 
-`ParticipantBalance` — participant id, display name, balance in centavos. Produced only by `BalanceRepository`; also the input type of `DebtSimplifier`.
+`ParticipantBalance` — participant id, display name, balance in centavos. Produced only by `BalanceRepository`; also the input type of the settlement planners.
 
 `BalanceRepository` — holds `BALANCES_SQL`, the four-leg aggregate of §4.3. This is the single most correctness-critical statement in the system.
 
-`DebtSimplifier` — a final class with static methods and no Spring dependency, so it is unit-testable without a container. Rejects a non-zero-sum input with `IllegalArgumentException`: that condition indicates the aggregate is broken, and failing loudly is preferable to emitting a payment plan that does not settle.
+`BalanceExplanation` / `BalanceExplanationRepository` — the provenance read of §11: the same four legs as rows, plus the runtime check that they sum to the reported balance.
 
-`SuggestedPayment` — the payment instruction: both parties, the amount, and the recipient's Pix key.
-
-### 6.5 `settlement`
+### 6.5 `settlement` and `settlement.plan`
 
 `Settlement` — the row, including `status`, which the schema constrains to `COMPLETED`. The MVP has no pending state because there is no asynchronous payment verification to wait for; a status column exists so that adding one later does not require a migration of meaning.
 
 `SettlementService` — the transaction described in §3.2.
+
+The `plan` subpackage is the optimization engine, specified in §10. The pure core — `SettlementPlanner`, `GreedyOptimizer`, `ExactPlanSearch`, `PlanInvariants`, `RelationshipGraph`, `SettlementConstraints` — has no Spring dependency and is unit-tested without a container. `SettlementPlanService` supplies the data (balances, relationships, Pix keys, revision) inside one `REPEATABLE_READ` transaction; `SettlementPlanController` exposes GET (strategy as a parameter), POST (constraints in the body) and the compare endpoint.
 
 ### 6.6 `web`
 
@@ -352,9 +365,9 @@ Controllers pass primitives and request records; services return domain records.
 
 Repositories expose intent-named methods (`findByGroupIdAndIdempotencyKey`, `lockById`, `computeBalances`) rather than a generic query interface. Services may assume repositories perform no validation and no business decisions; repositories may assume their arguments are already validated. The boundary protects the ability to read every statement the system can issue by opening one file per table.
 
-### 7.3 `DebtSimplifier.simplify(List<ParticipantBalance>) → List<Transfer>`
+### 7.3 `SettlementPlanner.plan(strategy, balances, relationships, constraints) → SettlementPlan`
 
-The strictest contract in the system. Preconditions: the input sums to zero. Postconditions: applying every returned transfer drives all balances to zero; every amount is strictly positive; no transfer has the same participant on both ends; at most n−1 transfers are returned; and output is deterministic for a given input because both queues break ties on participant id. Callers may assume every returned transfer is individually valid under invariants I4 and I5 at the moment of generation — by construction each transfer's amount is at most the smaller of the two residual magnitudes.
+The strictest contract in the system. Preconditions: balances sum to zero; constraints, when present, name only group members and accompany an exact strategy. Postconditions, enforced by `PlanInvariants.verify` before the plan leaves the planner: applying every transfer drives all balances to exactly zero; every amount is strictly positive and within any cap; no transfer has the same participant on both ends; no payer-recipient pair repeats; no forbidden pair appears; total sent equals total owed. Plans are deterministic for a given input. `exact = true` additionally means the plan is provably optimal for the strategy's declared objective (§10.4). Failure modes are typed: oversized group → `UNSUPPORTED_OPTIMIZATION_SIZE`, unsatisfiable constraints → `NO_FEASIBLE_SETTLEMENT_PLAN`, constraints with GREEDY → `INVALID_SETTLEMENT_CONSTRAINT`, and an optimizer bug caught by the validator → `IllegalStateException`, surfacing as a 500 rather than a wrong plan.
 
 ### 7.4 Test seams
 
@@ -382,6 +395,10 @@ Violations here are silent and expensive. Nothing in the type system enforces th
 
 **I8 — Concurrent settlements cannot over-settle.** A corollary of I4/I5 plus §4.2, and the reason the group lock exists.
 
+**I9 — Every emitted settlement plan settles the group.** Enforced by `PlanInvariants.verify` on every generated plan, in production, not only in tests: amounts positive, no self-payment, pairs unique, constraints honored, and applying the plan leaves every balance at exactly zero. *Breaks if:* the validator call is removed — an optimizer bug then ships as a payment suggestion instead of a 500.
+
+**I10 — A balance explanation sums to the balance it explains.** Enforced at runtime in `BalanceService.explain` (§11) under `REPEATABLE_READ`. *Breaks if:* the balance aggregate and the explanation query stop describing the same legs — which is precisely the drift the runtime check exists to catch.
+
 **A1 — `clock_timestamp()`, not `now()`, orders the ledger.** `now()` is transaction-start time, but writes serialize at lock-acquisition time, so a transaction that waited would receive a timestamp earlier than writes it depends on, and the activity feed could show a settlement before the expense that created the debt.
 
 **A2 — The database is initialized empty.** See §4.11. A database created by an older revision silently lacks newer constraints.
@@ -394,6 +411,8 @@ Violations here are silent and expensive. Nothing in the type system enforces th
 
 **A6 — Every error code emitted has a bundle key.** Message resolution has no default (§4.9), so a missing key is a runtime failure, not a degraded message.
 
+**A7 — The exact-search thresholds match measured behavior.** Ten nonzero balances uncapped, eight capped, backstopped by a deterministic node budget (§10.6). The numbers came from measurement on adversarial instances; raising them without re-measuring turns a 400 into a slow request.
+
 ---
 
 ## 9. Known gaps and future work
@@ -404,7 +423,8 @@ Violations here are silent and expensive. Nothing in the type system enforces th
 | Pix key editing | Not implemented. A key typed incorrectly can never be corrected: a wrong key appears in full on every payment instruction, and a participant with no key appears as a recipient with the key shown as absent. This is the most user-visible gap. Participants are not accounting rows, so append-only (§4.8) does not forbid a mutation path — it was never built. |
 | Participant removal | Not implemented; the deferred foreign key on `expense_shares` deliberately makes a raw delete fail rather than silently corrupt balances. |
 | Group and participant creation idempotency | The browser forms for creating a group and adding a participant carry no idempotency key, and the corresponding endpoints accept none — a back-button resubmission duplicates the participant (the expense and settlement paths are protected). |
-| Rate limiting and abuse controls | Absent. `POST /api/v1/groups` is unauthenticated by design, so a public deployment needs per-IP limits and caps before exposure. |
+| Historical balance snapshots | "Balances as of ledger entry N" is not implemented natively. The ledger endpoint's dense sequences make external reconstruction possible; a native version would need a cross-table cutoff that is easy to get subtly wrong, and a clean ledger view was judged better than a fragile snapshot feature (§11). |
+| Rate limiting and abuse controls | Absent. `POST /api/v1/groups` is unauthenticated by design, so a public deployment needs per-IP limits and caps before exposure. The exact-plan endpoints add CPU-bound work per request (bounded by the node budget), which strengthens the case for per-IP limits. |
 | Public hosting | Not deployed. Preconditions: migrations, rate limiting, a declared data-retention posture (Pix keys are personal data), and confirmation that no invite token reaches platform access logs. |
 | Group-existence oracle | `GET` returns 404 before checking the token, so an unauthenticated caller can distinguish existing from non-existent group ids. Accepted: ids are random UUIDs and existence alone reveals nothing. |
 | Unknown-path responses on page routes | A URL matching no controller returns the JSON error contract rather than an HTML page, because advice scoped to a package cannot apply when no controller was selected (§4.9). |
@@ -413,9 +433,212 @@ Violations here are silent and expensive. Nothing in the type system enforces th
 
 ---
 
+## 10. The settlement optimization engine
+
+### 10.1 The problem, precisely
+
+Given nonzero balances b₁…bₙ summing to zero, a settlement plan is a list of
+transfers (payer, recipient, amount > 0), payer a debtor and recipient a
+creditor, such that applying every transfer leaves all balances at zero. Many
+plans exist for the same vector. Two measures distinguish them here:
+
+- **transfer count** — how many payments people must actually make;
+- **novel relationship edges** — transfers between participants with no prior
+  financial relationship in the group (§10.5).
+
+Minimizing transfer count is NP-hard: the minimum equals n minus the largest
+number of disjoint zero-sum subsets the vector can be partitioned into, and
+recognizing zero-sum subsets embeds subset-sum. So there is a real algorithmic
+trade: a fast heuristic with no guarantee, or an exact search with a size
+limit. SplitPix ships both and labels which is which.
+
+### 10.2 A worked example
+
+Balances, in reais: Ana +500, Bruno +400, Clara −400, Diego −300, Elisa −200
+(from two expenses: Ana paid a 500 hotel split by Diego and Elisa; Bruno paid
+a 400 car rental for Clara).
+
+**Greedy** pairs the largest debtor with the largest creditor, repeatedly:
+
+```
+Clara → Ana   400      (Ana now +100)
+Diego → Bruno 300      (Bruno now +100)
+Elisa → Bruno 100
+Elisa → Ana   100      — 4 transfers
+```
+
+Pairing Clara with Ana destroyed the {Bruno +400, Clara −400} component that
+the expense structure had already created. The true minimum:
+
+```
+Clara → Bruno 400      (one zero-sum component)
+Diego → Ana   300
+Elisa → Ana   200      — 3 transfers
+```
+
+Three transfers, and every one follows an existing expense relationship —
+here MIN_TRANSFERS and RELATIONSHIP_AWARE agree. They do not in general: with
+balances A −600, B −400, C +600, D +400 and relationships {A–D, B–C} only,
+the two-transfer minimum (A→C, B→D) creates two novel pairs, while the
+relationship-aware optimum spends a third transfer to get down to one novel
+pair (A→D 400, A→C 200, B→C 400) — and one is provably the floor, because the
+related edges alone carry at most 800 of the 1000 owed. Both cases are pinned
+in `SettlementPlannerTest`.
+
+### 10.3 The plan space: basic plans
+
+Every strategy searches (or emits into) the same space: plans in which each
+transfer either zeroes one participant or saturates a capped edge. These are
+the basic solutions of the underlying (capacitated) transportation problem.
+The space is exhaustive in the sense that matters: any feasible plan can be
+reduced — by canceling flow around cycles until an edge empties or hits its
+cap — to a basic plan on a subset of its own edges, which therefore has no
+more transfers and no more novel edges than the original. Searching basic
+plans only is a completeness argument, not an approximation.
+
+### 10.4 The strategies
+
+**GREEDY** (`GreedyOptimizer`). Two priority queues, largest debtor against
+largest creditor, transfer the smaller magnitude, deterministic tie-break by
+participant id. O(n log n), at most n−1 transfers, any group size. Reports
+`exact = false` unconditionally — §10.2 shows why the claim would be false.
+
+**MIN_TRANSFERS** (`ExactPlanSearch`, transfers-only objective). Depth-first
+search over basic plans: at each state, for every active (debtor, creditor)
+pair, transfer min(debt, credit, cap) and recurse. Memoized on the remaining
+balance vector — the cost to finish from a state does not depend on the path
+into it. Returns a provably minimal plan (`exact = true`).
+
+**RELATIONSHIP_AWARE** (same core, lexicographic objective). Cost is the pair
+(novel edges, transfers) compared lexicographically; MIN_TRANSFERS is the
+degenerate case that charges zero for novelty. The result is exact for the
+declared objective: fewest transfers between unrelated people first, fewest
+transfers second.
+
+Determinism, all strategies: pairs are visited in participant order and ties
+keep the first plan found, so equal inputs give equal plans — which the API
+relies on for replay-stability and the tests rely on for pinning.
+
+### 10.5 The relationship graph
+
+Defined in ADR 0010, derived in one query: A–B are related when one paid an
+expense the other held a positive share of, or a completed settlement exists
+between them, either direction. Undirected, unweighted; zero shares create no
+edge; co-sharers of the same expense are not related to each other (the money
+flowed through the payer). Settling a suggested payment creates a real edge,
+so a novel pair used once stops being novel.
+
+### 10.6 Complexity, thresholds, and the node budget
+
+The search is exponential in the worst case. Measured on 200 randomized
+adversarial instances per configuration (values chosen to make zero-sum
+subsets rare, all pairs allowed, empty relationship graph — the worst shape),
+on an Apple-silicon laptop:
+
+| Configuration | Worst case |
+|---|---|
+| 10 nonzero balances, no cap | 59 ms |
+| 8 nonzero balances, per-transfer cap | 136 ms |
+| 12 nonzero balances, no cap | exceeds the node budget |
+
+Hence the limits: **10 nonzero balances** for exact strategies, **8 with a
+cap** (a saturating move zeroes nobody, so used edges join the memo key and
+states repeat far less). Past the limit: 400 `UNSUPPORTED_OPTIMIZATION_SIZE`,
+never a silent fallback (ADR 0009). A deterministic budget of five million
+search states backstops the thresholds; identical input explores identical
+states, so the budget can never fail intermittently for a given request.
+`PlanSearchPropertyTest.worstCasesAtTheThreshold` keeps boundary instances
+inside the budget.
+
+### 10.7 Constraints
+
+Two types (ADR 0011): directed forbidden pairs and a per-transfer cap. Both
+prune moves inside the search, so satisfaction is by construction; both are
+re-checked by `PlanInvariants` on the way out. A plan carries at most one
+instruction per payer-recipient pair, so a cap below a two-person debt is
+genuinely infeasible — answered with 409 `NO_FEASIBLE_SETTLEMENT_PLAN`, the
+same verdict the search returns whenever constraints admit no plan. GREEDY
+plus constraints is a 400: greedy cannot honor them without sometimes
+reporting false infeasibility, and a constraint honored "usually" is worse
+than none.
+
+### 10.8 How the engine is validated
+
+Three independent oracles, none sharing code with the solver:
+
+1. **Partition bound.** For random vectors up to n = 8, an independent
+   subset DP computes n − max zero-sum partition — the closed-form minimum —
+   and the solver's transfer count must equal it (300 seeds).
+2. **Exhaustive enumeration.** For random small instances with random
+   relationships, forbidden pairs and caps, a memo-less enumeration of the
+   entire move space computes the true lexicographic optimum — and the true
+   infeasibility verdict — which the solver must match (250 seeds).
+3. **Re-application.** Every plan from every strategy is re-applied to the
+   balances in test code (not via `PlanInvariants`, so a checker bug cannot
+   mask a solver bug) and must zero the group.
+
+Plus the pinned counterexamples of §10.2, determinism checks, and threshold
+boundary tests. In production, every plan passes `PlanInvariants.verify`
+before it leaves the service (I9).
+
+---
+
+## 11. Balance provenance
+
+`GET /participants/{id}/balance-explanation` decomposes a balance into the
+ledger entries behind it: the same four legs the balance aggregate sums —
+expenses paid (+), shares held (−), settlements sent (+), received (−) — as
+rows in ledger order, zero shares omitted.
+
+The design constraint (ADR 0012) is that the explanation must be the same
+truth as the balance, not a parallel calculation that can drift. Two
+mechanisms enforce it. The queries share one `REPEATABLE_READ` snapshot, and
+the service sums the entries and compares against the balance aggregate's
+answer: a mismatch is an `IllegalStateException` — a 500 — because a
+statement that almost reconciles is worse than no statement. The equality is
+also asserted over randomized activity in `BalanceExplanationApiTest`, and
+the browser statement page (`/g/{id}/extrato/{participantId}`) renders the
+rows with the reconciled total as its closing line.
+
+The ledger view itself (`GET /activity`) carries a dense 1-based `sequence`
+per entry, ordered by `(created_at, id)` — trustworthy as serialization order
+because writes hold the group lock and timestamp with `clock_timestamp()`
+(A1). The highest sequence is the group's ledger revision, the same number
+plans are stamped with. Point-in-time balance reconstruction ("balances as of
+entry N") is not implemented; the ledger endpoint provides the entries to do
+it externally, and a native implementation is listed in §9.
+
+---
+
+## 12. Against a conventional expense-sharing design
+
+The comparison is with the conventional way these systems are built — a
+mutable balances table and one hardcoded settle-up routine — not with any
+specific product; competitors' internals are not verifiable from here.
+
+| Dimension | Conventional design | SplitPix |
+|---|---|---|
+| Balance storage | mutable balance column, updated per write | derived from the ledger on every read; zero-sum is a query property (§4.3) |
+| Corrections | edit or delete the expense | append a compensating entry; history is never rewritten (§4.8) |
+| Concurrent writes | last-write-wins or row-level accidents | serialized per group by an explicit lock, with invariants I4/I5/I8 checked inside it (§4.2) |
+| Retries | duplicate rows or client-side dedup | idempotency key + request hash; replay is byte-identical, mutation is a 409 (§4.5) |
+| Settlement output | one algorithm, usually greedy, often labeled "simplify debts" | three strategies with declared objectives; exactness is a tested claim, not a label (§10) |
+| Constraints | none | forbidden pairs and per-transfer caps, enforced exactly or refused (§10.7) |
+| Explainability | a number | any balance decomposes into ledger entries that provably sum to it (§11); any plan states its strategy, guarantee and novel-edge cost |
+| Payments | some execute payments | payment instructions only, never execution or verification (§1.4) |
+| Testing | mocked persistence | real PostgreSQL, deterministic lock tests, seeded property tests, independent brute-force oracles (§7.4, §10.8) |
+
+The right-hand column is the project's identity in one table: a correctness-
+first ledger under an ordinary expense-splitting UI, with the settlement
+graph treated as a decision rather than a side effect.
+
+---
+
 ## Appendix A: glossary
 
 **Balance** — a participant's net position in centavos: positive means the group owes them, negative means they owe the group. Always derived (§4.3).
+
+**Basic plan** — a settlement plan in which every transfer zeroes a participant or saturates a capped edge; the space the exact search enumerates (§10.3).
 
 **Centavo** — 1/100 of a Brazilian real; the atomic unit of all monetary values here.
 
@@ -427,12 +650,22 @@ Violations here are silent and expensive. Nothing in the type system enforces th
 
 **Invite token** — the 256-bit secret that grants access to a group; the system's only credential (§4.7).
 
+**Ledger revision** — the count of a group's accounting entries (expenses plus completed settlements). Append-only, so it only grows; plans are stamped with the revision they were derived from.
+
+**Novel relationship edge** — a transfer between two participants with no prior financial relationship in the group (§10.5); the quantity RELATIONSHIP_AWARE minimizes first.
+
 **Pix** — Brazil's instant payment system. SplitPix coordinates around it but performs no transfers.
 
 **Pix key** — an email address, phone number, or random UUID that identifies a payee in Pix.
 
+**Relationship graph** — the undirected graph over participants derived from the ledger: an edge means a shared expense (payer to positive-share holder) or a completed settlement (ADR 0010).
+
 **Settlement** — a recorded assertion that one participant paid another; append-only and always `COMPLETED`.
+
+**Settlement plan** — a derived list of payment instructions that would zero every balance; carries its strategy, exactness claim and metrics (§10). Never stored.
+
+**Strategy** — one of GREEDY, MIN_TRANSFERS, RELATIONSHIP_AWARE: the declared objective a plan was computed under (§10.4).
 
 **Share** — the portion of an expense assigned to one participant; shares of an expense sum to its total (I2).
 
-**Suggested payment** — a transfer proposed by `DebtSimplifier`; generated on demand, never stored (§4.6).
+**Suggested payment** — one transfer of a settlement plan; generated on demand, never stored (§4.6).
