@@ -1,0 +1,8 @@
+{
+  "name": "splitpix-demo-recording",
+  "private": true,
+  "description": "Playwright walkthrough that records the demo video (scripts/record-demo.sh)",
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}
