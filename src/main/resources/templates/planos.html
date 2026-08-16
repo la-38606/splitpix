@@ -41,21 +41,38 @@
 		<section class="bloco">
 			<details class="detalhes-tecnicos">
 				<summary th:text="#{ui.planos.detalhes}">Detalhes técnicos</summary>
-				<table class="livro tecnico-livro">
-					<tbody>
-					<tr>
-						<td class="livro-tipo rotulo-micro" th:text="#{ui.planos.revisao}">revisão</td>
-						<td class="livro-descricao mono" th:text="${comparison.ledgerRevision()}">0</td>
-						<td class="livro-valor"></td>
-					</tr>
-					<tr th:each="plano : ${comparison.plans()}">
-						<td class="livro-tipo rotulo-micro" th:text="${plano.strategy()}">ENUM</td>
-						<td class="livro-descricao mono"
-							th:text="|exact=${plano.exact()} transfers=${plano.transferCount()} novelEdges=${plano.novelRelationshipEdges()}|">meta</td>
-						<td class="livro-valor mono" th:text="${@pageFormats.amount(plano.totalAmountCents())}">0,00</td>
-					</tr>
-					</tbody>
-				</table>
+
+				<p class="tecnico-revisao">
+					<span class="rotulo-micro" th:text="#{ui.planos.revisao}">Revisão do livro</span>
+					<span class="mono tecnico-revisao-num" th:text="${comparison.ledgerRevision()}">0</span>
+				</p>
+
+				<div class="tecnico-scroll">
+					<table class="tecnico-tabela">
+						<thead>
+						<tr>
+							<th th:text="#{ui.plano.estrategia}">Estratégia</th>
+							<th th:text="#{ui.planos.garantia}">Garantia</th>
+							<th class="num" th:text="#{ui.planos.transferencias}">Pagamentos</th>
+							<th class="num" th:text="#{ui.planos.paresNovos}">Pares novos</th>
+							<th class="num" th:text="#{ui.planos.total}">Total</th>
+						</tr>
+						</thead>
+						<tbody>
+						<tr th:each="plano : ${comparison.plans()}">
+							<td class="tecnico-enum" th:text="${plano.strategy()}">ENUM</td>
+							<td>
+								<span class="selo"
+									  th:classappend="${plano.exact()} ? 'selo-exato' : 'selo-heuristica'"
+									  th:text="${plano.exact()} ? #{ui.planos.garantia.exata} : #{ui.planos.garantia.heuristica}">exata</span>
+							</td>
+							<td class="mono num" th:text="${plano.transferCount()}">0</td>
+							<td class="mono num" th:text="${plano.novelRelationshipEdges()}">0</td>
+							<td class="mono num" th:text="${@pageFormats.amount(plano.totalAmountCents())}">0,00</td>
+						</tr>
+						</tbody>
+					</table>
+				</div>
 				<p class="nota-campo" th:text="#{ui.planos.revisaoNota}">nota</p>
 			</details>
 		</section>

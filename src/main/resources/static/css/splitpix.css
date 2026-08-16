@@ -579,13 +579,68 @@ button:focus-visible, a:focus-visible {
 	white-space: normal;
 }
 
-/* Same problem, technical panel: strategy enum names and "Revisão do livro"
-   overflow the history table's 5.5rem type column under fixed layout. */
-.tecnico-livro .livro-tipo {
-	width: 12rem;
-	white-space: normal;
-	overflow-wrap: anywhere;
+/* Technical panel: a real metrics table, not key=value prose. Its own
+   layout (auto, headed columns) rather than the history table's fixed one,
+   which was sized for one-word labels. */
+.tecnico-revisao {
+	margin: 14px 0 4px;
+	display: flex;
+	align-items: baseline;
+	gap: 12px;
 }
+
+.tecnico-revisao-num { font-size: 14px; }
+
+.tecnico-scroll { overflow-x: auto; }
+
+.tecnico-tabela {
+	border-collapse: collapse;
+	font-size: 14px;
+	margin-top: 6px;
+	min-width: 30rem;
+}
+
+.tecnico-tabela th {
+	font-family: var(--mono);
+	font-size: 12px;
+	font-weight: 400;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--ink-faint);
+	text-align: left;
+	padding: 6px 22px 6px 0;
+	border-bottom: 1px solid var(--ink);
+}
+
+.tecnico-tabela td {
+	padding: 8px 22px 8px 0;
+	border-bottom: 1px solid var(--rule);
+	vertical-align: baseline;
+}
+
+.tecnico-tabela th:last-child,
+.tecnico-tabela td:last-child { padding-right: 0; }
+
+.tecnico-tabela .num { text-align: right; }
+
+.tecnico-enum {
+	font-family: var(--mono);
+	font-size: 12px;
+	letter-spacing: 0.06em;
+	color: var(--ink-soft);
+}
+
+.selo {
+	font-family: var(--mono);
+	font-size: 12px;
+	letter-spacing: 0.06em;
+	border: 1px solid;
+	padding: 1px 7px;
+	white-space: nowrap;
+}
+
+.selo-exato { color: var(--credit); border-color: var(--credit); }
+.selo-heuristica { color: var(--ink-faint); border-color: var(--rule); }
 
 .extrato-total td {
 	border-bottom: 0;
