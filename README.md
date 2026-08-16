@@ -44,14 +44,16 @@ on other balance vectors the relationship-aware plan spends an extra payment
 to avoid creating a single awkward pair, and whether that trade is worth it
 depends on the group, so SplitPix puts the labeled options in front of the
 people involved instead of hardcoding a winner. That choice is the project's center of
-gravity. Pix is context rather than the point: in Brazil the transfer itself
-is instant and free, which leaves the accounting as the only friction worth
-building software for.
+gravity, and Pix is its last mile: the optimizer decides who should pay
+whom, and every instruction ends in a copyable Pix key, so completing a
+payment takes seconds in any Brazilian bank app. The accounting is the part
+worth building software for precisely because the transfer itself is
+already instant and free.
 
 ## How it works
 
 ```
-expenses (append-only ledger) → derived balances → settlement optimizer → payment instructions
+expenses (append-only ledger) → derived balances → settlement optimizer → Pix payment instructions
 ```
 
 Balances are never stored. Every read derives them from a four-leg aggregate
