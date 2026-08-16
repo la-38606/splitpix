@@ -60,13 +60,12 @@ depends on the group, so SplitPix puts the labeled options in front of the
 people involved instead of hardcoding a winner. That choice is the
 project's center of gravity.
 
-Pix is its last mile, and that part is personal: I'm Brazilian, and SplitPix
-is built for the groups I actually split bills with, which means people who
-settle up over Pix and speak Portuguese. So the optimizer decides who should
-pay whom, every instruction ends in a copyable Pix key that takes seconds in
-any Brazilian bank app, and the interface is in pt-BR because that is who it
-serves. The accounting is the part worth building software for precisely
-because, where I'm from, the transfer itself is already instant and free.
+Pix is its last mile. SplitPix is built for the Brazilian group-expense
+routine, so the optimizer decides who should pay whom, every instruction
+ends in a copyable Pix key that takes seconds in any bank app, and the
+interface is in Portuguese. The accounting is the part worth building
+software for precisely because in Brazil the transfer itself is already
+instant and free.
 
 ## How it works
 

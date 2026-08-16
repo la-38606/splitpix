@@ -240,10 +240,20 @@ Reads take no lock. `GET /balances` runs the single aggregate of §4.3; `GET /ac
 |---|---|
 | PostgreSQL | `FOR UPDATE` semantics, deferrable constraints, `UNION ALL` aggregate, and `clock_timestamp()` are all used deliberately; a different engine would require re-verifying §4.2 and §4.3 |
 | Testcontainers | G2 depends on tests running against the real engine; substituting an in-memory database would invalidate every constraint and locking test |
-| Spring Boot 4.1 / Jackson 3 | Jackson 3 lives under `tools.jackson.*`, and parser limits are configured through `spring.jackson.factory.constraints.read.*` (§4.13) |
+| Spring Boot 4.1 / Jackson 3 | Jackson 3 lives under `tools.jackson.*`, and parser limits are configured through `spring.jackson.factory.constraints.read.*` (§4.14) |
 | Thymeleaf | UI only; swapping it would not touch the accounting core |
 
-### 4.13 Request-size limits at the parser
+### 4.13 Sessions: cookie-only tracking
+
+**Context.** The browser tier's flash messages ("Pagamento registrado.") use Spring's flash attributes, which create an HTTP session on the first form POST. Servlet containers default to supporting URL-based session tracking as a fallback: when a response creates a session and the client has not yet proven cookie support, Tomcat rewrites the redirect target to `/g/{id};jsessionid=…`.
+
+**Decision.** `server.servlet.session.tracking-modes=cookie`. URL rewriting is disabled entirely.
+
+**The bug that forced the decision.** The rewritten path breaks the invite credential: the invite cookie is scoped to `/g/{groupId}` (§4.7), and RFC 6265 path-matching requires the request path to continue with `/` after the cookie path — `;jsessionid` does not match. So the first settlement, expense, or participant POST of every real browser session redirected to a URL its own credential could not follow, and the user saw a 403. Every MockMvc test stayed green because MockMvc performs no URL rewriting; the defect surfaced only when a scripted real browser ran the flow. This is the second container-dependent cookie bug in the project's history (the first: `Cookie.setAttribute("SameSite", …)` serialization being container-dependent, §4.7), which is why the fix is pinned by a real-container test rather than configuration reading (§7.4).
+
+**Consequences.** Session ids never appear in URLs, logs, or history — the same exposure argument that keeps the invite token out of URLs. Clients with cookies disabled cannot receive flash messages, which is moot here: the invite cookie is already the only credential, so a cookie-less browser cannot use the page tier at all.
+
+### 4.14 Request-size limits at the parser
 
 **Decision.** `spring.jackson.factory.constraints.read.max-document-length` caps the JSON document, and `CreateExpenseRequest.shares` is bounded by `@Size(max = 500)`.
 
@@ -284,10 +294,17 @@ splitpix/
 │   └── static/                      splitpix.css, copiar.js
 ├── src/test/java/com/luiz/splitpix/  API tests, plus settlement/plan/ and web/ unit tests
 ├── demo.sh                          walk-through; --tecnico adds the optimizer act
-├── scripts/build-design-doc.sh      regenerates the design PDF from this file
+├── e2e/                             Playwright walkthrough that records the demo
+│                                    video; not part of CI or the maven build
+├── scripts/
+│   ├── build-design-doc.sh          regenerates the design PDF from this file
+│   ├── seed-demo.sh                 deterministic demo group (strategies diverge)
+│   ├── demo-music.py                stdlib-synthesized pad for the recording
+│   └── record-demo.sh               one-command demo video (docs/demo/)
 └── docs/
     ├── design.md                    this document
     ├── adr/                         one record per load-bearing decision
+    ├── demo/                        the recorded walkthrough + how to remake it
     └── screenshots/                 real captures embedded in the README
 ```
 
@@ -327,7 +344,7 @@ splitpix/
 
 `ExpenseService` — the expense creation transaction (§3.2 has the settlement analogue). Validates that the total is positive and capped, that the payer and every share participant belong to the group, that no participant appears twice, that no share is negative, and that shares sum exactly to the total. Returns shares in a canonical order matching the database's ordering so a replay is byte-identical to the original response.
 
-`CreateExpenseRequest` — carries the bean-validation constraints, including the type-argument constraints (`List<@NotNull @Valid ShareRequest>`) that reject null elements, and the size bound of §4.13. Its compact constructor strips the description so validation and storage agree on length.
+`CreateExpenseRequest` — carries the bean-validation constraints, including the type-argument constraints (`List<@NotNull @Valid ShareRequest>`) that reject null elements, and the size bound of §4.14. Its compact constructor strips the description so validation and storage agree on length.
 
 ### 6.4 `balance`
 
@@ -374,6 +391,8 @@ The strictest contract in the system. Preconditions: balances sum to zero; const
 `ApiTestSupport` is the shared base for API tests; sharing one Spring context and one container across subclasses is deliberate, since each distinct annotation combination forks a new context and a new PostgreSQL container. `@MockitoSpyBean` on a repository is the seam used to force failures that cannot be produced through the API — rollback tests let the real insert execute and then throw, because a test that mocks the insert away would pass without any transaction at all.
 
 `GroupLockTest` deserves mention as a boundary of a different kind: it holds the group lock inside a paused transaction and asserts the second request has not completed, because a barrier-synchronized race passes in a warm test context even with the lock removed.
+
+`ServletContainerFlowTest` is the one test that boots the embedded container (`RANDOM_PORT`) instead of MockMvc, precisely because two real bugs in this project were container behavior MockMvc cannot exhibit: cookie-attribute serialization and session-id URL rewriting (§4.13). It drives the first form POST of a session over real HTTP with the JDK's HttpClient — chosen because it follows no redirects by default, keeping the `Location` header observable — and asserts the redirect path is one the invite cookie still matches. Removing the tracking-modes property makes it fail.
 
 ---
 
