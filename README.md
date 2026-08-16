@@ -2,11 +2,12 @@
 
 [![CI](https://github.com/la-38606/splitpix/actions/workflows/ci.yml/badge.svg)](https://github.com/la-38606/splitpix/actions/workflows/ci.yml)
 
-Splitting group expenses in Brazil usually ends with someone doing arithmetic
-in a WhatsApp thread at midnight. SplitPix keeps the ledger for you: unequal
-expense shares, derived net balances, a minimal set of suggested repayments,
-and each recipient's Pix key one copy away. Java 21, Spring Boot, PostgreSQL,
-plain SQL. **It does not move money** — the transfer happens in your bank app.
+Splitting group expenses in Brazil tends to end with someone doing arithmetic
+in a WhatsApp thread at midnight. SplitPix is a group-expense ledger built
+around Pix: exact unequal shares, per-participant net balances, a minimal
+repayment plan, and each recipient's Pix key one copy away. Java 21, Spring
+Boot, PostgreSQL, hand-written SQL over `JdbcTemplate`. **It does not move
+money** — transfers happen in the payer's bank app.
 
 <p>
   <img src="docs/screenshots/group-desktop.png" alt="Group ledger, desktop" width="70%">
@@ -15,14 +16,22 @@ plain SQL. **It does not move money** — the transfer happens in your bank app.
 
 ## How it works
 
-Balances are never stored. Every read derives them from the append-only ledger
-with one four-leg SQL aggregate, so "balances sum to zero" is a property of a
-query rather than a discipline. Every write in a group serializes on a single
-`SELECT ... FOR UPDATE` of the group row; that one decision is what makes
-over-settlement impossible under concurrency, and it is cheap because a dinner
-group writes at human speed. Retries are safe: idempotency keys plus a request
-hash make a same-content retry a replay and a changed-content retry a 409.
-The reasoning, with the alternatives I rejected, is in
+The ledger is append-only and balances are never stored. Every read derives
+them with a single four-leg `UNION ALL` aggregate (expenses paid, shares
+assigned, settlements sent, settlements received), which makes "balances sum
+to zero" a property of the query rather than an invariant the application
+must maintain. Every accounting write runs inside one transaction that first
+takes `SELECT ... FOR UPDATE` on the group row, so validation and insert are
+atomic with respect to every other write in that group; this one lock is what
+rules out concurrent over-settlement, and `READ COMMITTED` suffices beneath
+it.
+
+Writes are idempotent: keys are unique per `(group, key)` and each row stores
+a SHA-256 of the normalized request, so a same-content retry replays with a
+byte-identical body and a changed-content retry returns 409 instead of
+silently discarding the change. Composite foreign keys on
+`(group_id, participant_id)` make cross-group references unrepresentable even
+if the service layer is bypassed. Rationale and rejected alternatives:
 [docs/design.md](docs/design.md) and [docs/adr/](docs/adr/).
 
 ## Run it
@@ -39,8 +48,8 @@ suite; every test that touches persistence runs against real PostgreSQL.
 
 ## Example
 
-From the demo, unedited (five people, Luiz paid R$ 420,00 with unequal shares;
-Bruno, Clara and Diego elided):
+Demo output, unedited (five people, Luiz paid R$ 420,00 with unequal shares;
+three participants elided):
 
 ```
 == 5. Saldos
@@ -57,13 +66,14 @@ Full API, error codes and curl examples: [docs/api.md](docs/api.md).
 
 ## The hardest problem
 
-My concurrency test was lying to me. Two settlement threads started on a
-barrier "proved" the group lock worked, and kept passing after I deleted the
-lock: in a warm JVM the first transaction committed before the second ever
-reached the database. The fix that mattered was to the test, not the code:
-hold the lock open inside a paused transaction and assert the second request
-is still blocked, plus a race where each settlement is valid alone but
-together they over-pay. Deleting the lock now fails the suite deterministically.
+The subtlest defect was a concurrency test that proved nothing. Two
+settlement threads released by a barrier appeared to demonstrate the group
+lock, and kept passing after the lock was deleted: in a warm JVM the first
+transaction commits before the second ever reaches the database. The
+replacement (`GroupLockTest`) holds the lock open inside a paused transaction
+and asserts that a second request is still blocked, alongside a two-thread
+race in which each settlement is valid alone but the pair jointly over-pays.
+Deleting the lock now fails the suite deterministically.
 
 ## Limitations
 
