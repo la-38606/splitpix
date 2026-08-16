@@ -17,7 +17,9 @@
 	--rule: #ded3c2;
 	--ink: #241f1a;
 	--ink-soft: #6a6055;
-	--ink-faint: #938a7c;
+	/* Measured 5.17:1 on paper, 4.74:1 on the sunken band (WCAG AA for normal
+	   text needs 4.5). The previous #938a7c sat at 3.03:1 and failed. */
+	--ink-faint: #6d6456;
 	--credit: #0e6b5e;
 	--debt: #9e3b26;
 
@@ -155,9 +157,9 @@ body {
 	border-bottom: 1px solid var(--rule);
 }
 
-.saldo-nome { font-size: 17px; }
+.saldo-nome { font-size: 17px; min-width: 0; overflow-wrap: anywhere; }
 
-.saldo-cifra { font-size: 14px; }
+.saldo-cifra { font-size: 14px; white-space: nowrap; }
 
 .credito { color: var(--credit); }
 .debito { color: var(--debt); }
@@ -240,6 +242,9 @@ body {
 	background: var(--paper-raised);
 	border: 1px solid var(--rule);
 	padding: 2px 7px;
+	/* RANDOM keys are 36-char UUIDs; on a 320px viewport they must wrap,
+	   not push the page into horizontal scroll. */
+	overflow-wrap: anywhere;
 }
 
 .chave-mascarada {
@@ -267,7 +272,7 @@ body {
 }
 
 .livro-tipo { width: 6.5rem; white-space: nowrap; }
-.livro-descricao { font-family: var(--serif); font-size: 17px; }
+.livro-descricao { font-family: var(--serif); font-size: 17px; overflow-wrap: anywhere; }
 .livro-quem { width: 8rem; }
 .livro-valor { text-align: right; white-space: nowrap; }
 
@@ -387,6 +392,20 @@ input[type="text"]:focus, select:focus {
 .botao-primario:hover, .botao-marcar:hover { background: #0b564b; }
 .botao-secundario:hover, .botao-copiar:hover { background: var(--paper-sunken); }
 button:disabled { opacity: 0.6; cursor: default; }
+
+button:focus-visible, a:focus-visible {
+	outline: 2px solid var(--credit);
+	outline-offset: 2px;
+}
+
+/* Touch targets: compact chips are fine under a pointer, not under a thumb. */
+@media (pointer: coarse) {
+	.botao-copiar, .botao-marcar, .botao-secundario, .botao-primario,
+	input[type="text"], select {
+		min-height: 44px;
+	}
+	.botao-copiar { padding: 10px 14px; }
+}
 
 /* ------------------------------------------------------------------- avisos */
 
