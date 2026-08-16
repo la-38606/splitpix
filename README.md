@@ -24,10 +24,9 @@ One minute of the real application on synthetic data: expenses, balances, a
 suggested plan, the statement behind a balance, three strategies disagreeing
 about the same balances, and a payment recorded over Pix.
 
-[<img src="docs/demo/splitpix-demo-thumb.png" alt="Demo video: strategy comparison" width="70%">](docs/demo/splitpix-demo.webm)
+[<img src="docs/demo/splitpix-demo-thumb.png" alt="Demo video: strategy comparison" width="70%">](docs/demo/splitpix-demo.mp4)
 
-The recording is generated, not screen-captured — a Playwright walkthrough
-over a deterministic seed, so it can be reproduced from a clean checkout:
+Regenerate locally:
 
 ```bash
 ./scripts/record-demo.sh

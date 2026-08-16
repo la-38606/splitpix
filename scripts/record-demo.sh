@@ -5,8 +5,9 @@
 #   1. starts SplitPix (unless SPLITPIX_URL points at a running instance);
 #   2. seeds the deterministic demo group (scripts/seed-demo.sh);
 #   3. runs the Playwright walkthrough (e2e/demo.spec.ts) with video on;
-#   4. leaves the recording at docs/demo/splitpix-demo.webm
-#      (plus .mp4 when an H.264-capable ffmpeg is on PATH).
+#   4. converts the recording to H.264 (ffmpeg-static, an e2e dev
+#      dependency) and leaves it at docs/demo/splitpix-demo.mp4 —
+#      the format GitHub's file viewer plays inline.
 #
 # Needs Java 21 + Docker (for the app) and Node (for Playwright). The first
 # run downloads the Playwright Chromium build. Only processes started by
@@ -54,13 +55,11 @@ GROUP_URL="$GROUP_URL" npx playwright test demo.spec.ts
 
 VIDEO="$(find test-results -name '*.webm' -print -quit)"
 [ -n "$VIDEO" ] || { echo "erro: nenhum vídeo gravado" >&2; exit 1; }
+FFMPEG="$(node -p "require('ffmpeg-static')")"
 cd ..
 mkdir -p docs/demo
-cp "e2e/$VIDEO" docs/demo/splitpix-demo.webm
-
-if command -v ffmpeg > /dev/null 2>&1; then
-	ffmpeg -y -loglevel error -i docs/demo/splitpix-demo.webm \
-		-c:v libx264 -pix_fmt yuv420p -crf 26 docs/demo/splitpix-demo.mp4
-fi
+"$FFMPEG" -y -loglevel error -i "e2e/$VIDEO" \
+	-c:v libx264 -pix_fmt yuv420p -crf 23 -preset slow -movflags +faststart \
+	docs/demo/splitpix-demo.mp4
 
 ls -la docs/demo/
