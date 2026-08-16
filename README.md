@@ -57,12 +57,16 @@ lines the expenses already drew. The objectives can genuinely conflict, too:
 on other balance vectors the relationship-aware plan spends an extra payment
 to avoid creating a single awkward pair, and whether that trade is worth it
 depends on the group, so SplitPix puts the labeled options in front of the
-people involved instead of hardcoding a winner. That choice is the project's center of
-gravity, and Pix is its last mile: the optimizer decides who should pay
-whom, and every instruction ends in a copyable Pix key, so completing a
-payment takes seconds in any Brazilian bank app. The accounting is the part
-worth building software for precisely because the transfer itself is
-already instant and free.
+people involved instead of hardcoding a winner. That choice is the
+project's center of gravity.
+
+Pix is its last mile, and that part is personal: I'm Brazilian, and SplitPix
+is built for the groups I actually split bills with, which means people who
+settle up over Pix and speak Portuguese. So the optimizer decides who should
+pay whom, every instruction ends in a copyable Pix key that takes seconds in
+any Brazilian bank app, and the interface is in pt-BR because that is who it
+serves. The accounting is the part worth building software for precisely
+because, where I'm from, the transfer itself is already instant and free.
 
 ## How it works
 
