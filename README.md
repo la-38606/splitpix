@@ -24,7 +24,9 @@ One minute of the real application on synthetic data: expenses, balances, a
 suggested plan, the statement behind a balance, three strategies disagreeing
 about the same balances, and a payment recorded over Pix.
 
-splitpix-demo.mp4
+
+https://github.com/user-attachments/assets/62cbc9ee-f34e-48e0-864e-d9afc7935271
+
 
 Regenerate locally:
 
