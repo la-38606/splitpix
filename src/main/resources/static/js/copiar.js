@@ -1,4 +1,4 @@
-// Clipboard is the one thing HTML cannot do on its own (addendum 36.1).
+// Clipboard is the one thing HTML cannot do on its own here.
 document.addEventListener('click', function (event) {
 	var botao = event.target.closest('[data-copiar]');
 	if (!botao) {

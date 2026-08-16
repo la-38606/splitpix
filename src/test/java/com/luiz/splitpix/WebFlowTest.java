@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MvcResult;
 
 /**
- * The browser flow of addendum 36: invite link exchanged for a cookie, then
+ * The browser flow (docs/design.md sections 4.5 and 4.7): invite link exchanged for a cookie, then
  * Post/Redirect/Get through the whole loop.
  */
 class WebFlowTest extends ApiTestSupport {

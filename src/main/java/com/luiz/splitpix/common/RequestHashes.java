@@ -7,8 +7,7 @@ import java.util.HexFormat;
 
 /**
  * Hashes the meaningful content of an idempotent write so a replayed key can be
- * checked against the request it originally applied (design doc 14.3, made a
- * precondition for the browser flow by addendum 36.5).
+ * checked against the request it originally applied (ADR 0003).
  *
  * Without it, using the back button to edit a submitted form and resubmitting
  * sends the same key with different content, and the server silently returns

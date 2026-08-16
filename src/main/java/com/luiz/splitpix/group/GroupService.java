@@ -71,7 +71,7 @@ public class GroupService {
 		return group;
 	}
 
-	/** 256 bits from SecureRandom, base64url — above the 128-bit floor set in addendum 35.6. */
+	/** 256 bits from SecureRandom, base64url — comfortably above a 128-bit entropy floor (docs/design.md section 4.7). */
 	private static String newInviteToken() {
 		byte[] bytes = new byte[32];
 		SECURE_RANDOM.nextBytes(bytes);

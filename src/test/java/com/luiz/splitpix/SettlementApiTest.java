@@ -200,7 +200,7 @@ class SettlementApiTest extends ApiTestSupport {
 
 	@Test
 	void replayWithDifferentBody_returns409() throws Exception {
-		// Request hashing (14.3 / addendum 36.5): a key reused with a different
+		// Request hashing (ADR 0003): a key reused with a different
 		// amount is a conflict — the browser back button is the common cause.
 		postSettlement(groupId, token, "s-div", settlementJson(anaId, luizId, 5000))
 				.andExpect(status().isCreated());

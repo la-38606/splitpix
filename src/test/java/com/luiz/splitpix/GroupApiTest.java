@@ -28,7 +28,7 @@ class GroupApiTest extends ApiTestSupport {
 				.andExpect(content().contentType(MediaType.APPLICATION_JSON)));
 		UUID.fromString(body.get("groupId").asText());
 		UUID.fromString(body.get("creatorParticipantId").asText());
-		// 22 base64url chars ≈ the 128-bit entropy floor from addendum 35.6.
+		// 22 base64url chars ≈ the 128-bit entropy floor (docs/design.md section 4.7).
 		assertThat(body.get("inviteToken").asText().length()).isGreaterThanOrEqualTo(22);
 	}
 

@@ -168,7 +168,7 @@ class ExpenseApiTest extends ApiTestSupport {
 
 	@Test
 	void sameKeyDifferentBody_returns409() throws Exception {
-		// Request hashing (14.3, made a precondition by addendum 36.5): reusing
+		// Request hashing (ADR 0003): reusing
 		// a key with different content is a conflict, not a silent no-op that
 		// discards the caller's new data.
 		postExpense(groupId, token, "exp-original", expenseJson(30000, 10000, 12000, 8000))

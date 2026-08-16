@@ -32,7 +32,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 /**
- * The browser-facing pages (addendum 36). Every write is Post/Redirect/Get with
+ * The browser-facing pages (docs/design.md sections 4.5 and 4.7). Every write is Post/Redirect/Get with
  * an idempotency key minted when the form is rendered, so a refresh cannot
  * resubmit and a back-button edit is a conflict rather than silent data loss.
  *

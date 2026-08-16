@@ -1,5 +1,5 @@
 -- SplitPix schema (design doc v2.1 section 10, plus the hardening noted below).
--- Applied idempotently at startup via spring.sql.init; converted to Flyway V1__init.sql before hosting (addendum 35.4).
+-- Applied idempotently at startup via spring.sql.init; converted to Flyway V1__init.sql before hosting (docs/design.md section 4.11).
 -- All monetary values are integer centavos (BIGINT). Floating point is never used for money.
 --
 -- Hardening beyond the doc's schema:
@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS expenses (
     total_cents BIGINT NOT NULL,
     idempotency_key VARCHAR(120) NOT NULL,
     -- SHA-256 of the request that created this row: replaying the key with
-    -- different content is a conflict, not a silent no-op (14.3 / addendum 36.5).
+    -- different content is a conflict, not a silent no-op (ADR 0003).
     request_hash CHAR(64) NOT NULL,
     -- clock_timestamp(), not NOW(): NOW() freezes at transaction start, but writes
     -- serialize on the group lock acquired later, so NOW() can invert the causal

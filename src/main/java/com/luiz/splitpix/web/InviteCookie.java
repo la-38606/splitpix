@@ -10,7 +10,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 
 /**
- * Invite-token transport for the browser (design reference §4.7).
+ * Invite-token transport for the browser (docs/design.md section 4.7).
  *
  * The token arrives once in the invite URL and is immediately exchanged for an
  * HttpOnly cookie scoped to that group's path; every later URL is token-free.
