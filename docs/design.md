@@ -395,7 +395,7 @@ Violations here are silent and expensive. Nothing in the type system enforces th
 
 **I8 — Concurrent settlements cannot over-settle.** A corollary of I4/I5 plus §4.2, and the reason the group lock exists.
 
-**I9 — Every emitted settlement plan settles the group.** Enforced by `PlanInvariants.verify` on every generated plan, in production, not only in tests: amounts positive, no self-payment, pairs unique, constraints honored, and applying the plan leaves every balance at exactly zero. *Breaks if:* the validator call is removed — an optimizer bug then ships as a payment suggestion instead of a 500.
+**I9 — Every emitted settlement plan settles the group.** Enforced by `PlanInvariants.verify` on every generated plan, at request time in production: amounts positive, no self-payment, pairs unique, constraints honored, and applying the plan leaves every balance at exactly zero. *Breaks if:* the validator call is removed — an optimizer bug then ships as a payment suggestion instead of a 500.
 
 **I10 — A balance explanation sums to the balance it explains.** Enforced at runtime in `BalanceService.explain` (§11) under `REPEATABLE_READ`. *Breaks if:* the balance aggregate and the explanation query stop describing the same legs — which is precisely the drift the runtime check exists to catch.
 
