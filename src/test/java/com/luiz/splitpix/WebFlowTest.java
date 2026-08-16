@@ -40,7 +40,7 @@ class WebFlowTest extends ApiTestSupport {
 				.andReturn();
 
 		String location = result.getResponse().getRedirectedUrl();
-		String groupId = location.substring("/g/".length()).replace("?novo", "");
+		String groupId = location.substring("/g/".length());
 		return new Session(groupId, result.getResponse().getCookie(COOKIE));
 	}
 

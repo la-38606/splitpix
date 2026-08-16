@@ -71,7 +71,7 @@ public class GroupPageController {
 		CreateGroupResult result = groupService.create(new CreateGroupRequest(
 				groupName, creatorName, parseKeyType(pixKeyType, pixKeyValue), emptyToNull(pixKeyValue)));
 		InviteCookie.set(request, response, result.groupId(), result.inviteToken());
-		return "redirect:/g/" + result.groupId() + "?novo";
+		return "redirect:/g/" + result.groupId();
 	}
 
 	/** Invite link: exchanges the token for a cookie, then redirects to a token-free URL. */
