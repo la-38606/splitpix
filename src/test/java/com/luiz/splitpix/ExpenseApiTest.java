@@ -184,6 +184,28 @@ class ExpenseApiTest extends ApiTestSupport {
 	}
 
 	@Test
+	void sameKeyWithPaddedDescription_replays_notConflicts() throws Exception {
+		// The hash covers the normalized description: " Jantar " is the same
+		// request as "Jantar", not a conflict.
+		postExpense(groupId, token, "exp-pad", expenseJson(100, 100, 0, 0))
+				.andExpect(status().isCreated());
+
+		postExpense(groupId, token, "exp-pad", """
+				{
+				  "description": "  Jantar  ",
+				  "paidByParticipantId": "%s",
+				  "totalCents": 100,
+				  "shares": [
+				    {"participantId": "%s", "amountCents": 100},
+				    {"participantId": "%s", "amountCents": 0},
+				    {"participantId": "%s", "amountCents": 0}
+				  ]
+				}
+				""".formatted(luizId, luizId, anaId, brunoId))
+				.andExpect(status().isOk());
+	}
+
+	@Test
 	void sameKeyIdenticalBody_replaysRegardlessOfShareOrder() throws Exception {
 		// The hash is order-insensitive: the same allocation submitted with the
 		// shares listed differently is the same request, not a conflict.

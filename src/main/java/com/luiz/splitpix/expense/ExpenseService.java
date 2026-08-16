@@ -54,7 +54,11 @@ public class ExpenseService {
 			CreateExpenseRequest request) {
 		groupService.requireGroup(groupId, inviteToken);
 		IdempotencyKeys.validate(idempotencyKey);
-		String requestHash = hash(request);
+		// Normalized before hashing: " Jantar " and "Jantar" are the same
+		// request, and a spurious replay conflict is the failure ADR 0003
+		// exists to prevent.
+		String description = Texts.cleanName(request.description());
+		String requestHash = hash(description, request);
 
 		groupRepository.lockById(groupId);
 
@@ -70,7 +74,6 @@ public class ExpenseService {
 			return new CreateExpenseResult(expense, expenseRepository.findShares(expense.id()), false);
 		}
 
-		String description = Texts.cleanName(request.description());
 		List<ExpenseShare> shares = validate(groupId, request);
 
 		UUID expenseId = UUID.randomUUID();
@@ -84,13 +87,13 @@ public class ExpenseService {
 	}
 
 	/** Covers everything that changes what the expense means. */
-	private static String hash(CreateExpenseRequest request) {
+	private static String hash(String description, CreateExpenseRequest request) {
 		StringBuilder shares = new StringBuilder();
 		request.shares().stream()
 				.sorted(Comparator.comparing(share -> String.valueOf(share.participantId())))
 				.forEach(share -> shares.append(share.participantId()).append('=')
 						.append(share.amountCents()).append(','));
-		return RequestHashes.of(request.description(), request.paidByParticipantId(),
+		return RequestHashes.of(description, request.paidByParticipantId(),
 				request.totalCents(), shares);
 	}
 
