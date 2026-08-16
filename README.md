@@ -14,6 +14,31 @@ money** — transfers happen in the payer's bank app.
   <img src="docs/screenshots/group-mobile.png" alt="Group ledger, mobile" width="24%">
 </p>
 
+## Background
+
+Pix is Brazil's instant payment system, operated by the Central Bank since
+2020. Transfers are free for individuals, settle in seconds, and work around
+the clock; a recipient is addressed by a key — an email address, a phone
+number, or a random UUID. It has become the default way Brazilians move money
+between people, which means the *payment* half of splitting a bill is solved.
+
+The *accounting* half is not. A trip or a shared apartment produces dozens of
+expenses with unequal shares, and the group ends up with a web of pairwise
+debts nobody wrote down: who paid the market run, whether the R$ 420,00
+dinner was split by consumption or evenly, who already paid whom back. The
+usual tools are a spreadsheet and memory, and both fail at the same points —
+exact shares, running balances, and knowing the smallest set of transfers
+that settles everyone.
+
+SplitPix owns exactly that half. A group records each expense with exact
+per-person shares; the service derives every member's net balance, compresses
+the debt web into at most n−1 suggested transfers, and shows each debtor the
+recipient's key and the exact amount. Completed payments are recorded, so the
+plan shrinks as people pay. Pix keys are treated as personal data: CPF keys
+(Brazil's national ID doubles as a key type) are deliberately unsupported,
+since every group member can see stored keys
+([ADR 0004](docs/adr/0004-no-cpf-pix-keys.md)).
+
 ## How it works
 
 The ledger is append-only and balances are never stored. Every read derives
