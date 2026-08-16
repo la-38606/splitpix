@@ -16,12 +16,16 @@ import com.luiz.splitpix.participant.ParticipantService;
 import com.luiz.splitpix.participant.PixKeyType;
 import com.luiz.splitpix.settlement.CompleteSettlementRequest;
 import com.luiz.splitpix.settlement.SettlementService;
+import com.luiz.splitpix.settlement.plan.SettlementConstraints;
+import com.luiz.splitpix.settlement.plan.SettlementPlanService;
+import com.luiz.splitpix.settlement.plan.SettlementStrategy;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -47,16 +51,19 @@ public class GroupPageController {
 	private final ExpenseService expenseService;
 	private final BalanceService balanceService;
 	private final SettlementService settlementService;
+	private final SettlementPlanService settlementPlanService;
 	private final ActivityService activityService;
 
 	public GroupPageController(GroupService groupService, ParticipantService participantService,
 			ExpenseService expenseService, BalanceService balanceService,
-			SettlementService settlementService, ActivityService activityService) {
+			SettlementService settlementService, SettlementPlanService settlementPlanService,
+			ActivityService activityService) {
 		this.groupService = groupService;
 		this.participantService = participantService;
 		this.expenseService = expenseService;
 		this.balanceService = balanceService;
 		this.settlementService = settlementService;
+		this.settlementPlanService = settlementPlanService;
 		this.activityService = activityService;
 	}
 
@@ -122,6 +129,44 @@ public class GroupPageController {
 		return "redirect:/g/" + groupId;
 	}
 
+	/**
+	 * Strategy comparison plus the advanced form. The form submits via GET —
+	 * a plan is a pure derivation, so the resulting page is shareable and
+	 * refresh-safe with no PRG dance.
+	 */
+	@GetMapping("/g/{groupId}/planos")
+	public String plansPage(@PathVariable UUID groupId,
+			@RequestParam(required = false) String estrategia,
+			@RequestParam(required = false) String teto,
+			@RequestParam(required = false) UUID vetadoDe,
+			@RequestParam(required = false) UUID vetadoPara,
+			HttpServletRequest request, Model model) {
+		String token = InviteCookie.require(request);
+		GroupView view = groupService.getView(groupId, token);
+		var comparison = settlementPlanService.compare(groupId, token);
+		model.addAttribute("view", view);
+		model.addAttribute("comparison", comparison);
+		model.addAttribute("settled", comparison.plans().getFirst().transferCount() == 0);
+		model.addAttribute("estrategias", new SettlementStrategy[] {
+				SettlementStrategy.MIN_TRANSFERS, SettlementStrategy.RELATIONSHIP_AWARE });
+
+		if (estrategia != null && !estrategia.isBlank()) {
+			model.addAttribute("customPlan", settlementPlanService.plan(groupId, token,
+					parseStrategy(estrategia), parseConstraints(teto, vetadoDe, vetadoPara)));
+		}
+		return "planos";
+	}
+
+	/** The full accounting statement behind one participant's balance. */
+	@GetMapping("/g/{groupId}/extrato/{participantId}")
+	public String statementPage(@PathVariable UUID groupId, @PathVariable UUID participantId,
+			HttpServletRequest request, Model model) {
+		String token = InviteCookie.require(request);
+		model.addAttribute("view", groupService.getView(groupId, token));
+		model.addAttribute("explanation", balanceService.explain(groupId, token, participantId));
+		return "extrato";
+	}
+
 	@PostMapping("/g/{groupId}/pagamentos")
 	public String completePayment(@PathVariable UUID groupId, @RequestParam UUID payerParticipantId,
 			@RequestParam UUID recipientParticipantId, @RequestParam long amountCents,
@@ -146,7 +191,7 @@ public class GroupPageController {
 				.sum();
 
 		return new GroupPage(view.group(), view.participants(), balances,
-				balanceService.getSuggestedPayments(groupId, token),
+				settlementPlanService.recommended(groupId, token),
 				activityService.getActivity(groupId, token).reversed(),
 				names, outstanding,
 				UUID.randomUUID().toString(), UUID.randomUUID().toString());
@@ -177,6 +222,27 @@ public class GroupPageController {
 		catch (IllegalArgumentException e) {
 			throw new BadRequestException("VALIDATION_ERROR");
 		}
+	}
+
+	private static SettlementStrategy parseStrategy(String value) {
+		try {
+			return SettlementStrategy.valueOf(value);
+		}
+		catch (IllegalArgumentException e) {
+			throw new BadRequestException("VALIDATION_ERROR");
+		}
+	}
+
+	/** Half a forbidden pair is a form mistake, not a constraint to guess at. */
+	private static SettlementConstraints parseConstraints(String teto, UUID vetadoDe, UUID vetadoPara) {
+		if ((vetadoDe == null) != (vetadoPara == null)) {
+			throw new BadRequestException("INVALID_SETTLEMENT_CONSTRAINT");
+		}
+		Set<SettlementConstraints.Pair> pairs = vetadoDe == null
+				? Set.of()
+				: Set.of(new SettlementConstraints.Pair(vetadoDe, vetadoPara));
+		Long cap = teto == null || teto.isBlank() ? null : MoneyInput.parseCents(teto);
+		return new SettlementConstraints(pairs, cap);
 	}
 
 	/** A malformed id in a form field is the client's mistake, not a server failure. */

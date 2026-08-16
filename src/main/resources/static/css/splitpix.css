@@ -450,6 +450,134 @@ button:focus-visible, a:focus-visible {
 
 .participante-nome { font-size: 15px; }
 
+/* ----------------------------------------------- planos, extrato, disclosure */
+
+.folha-larga {
+	max-width: 68rem;
+	margin: 0 auto;
+	padding: 28px 24px 64px;
+}
+
+.folha {
+	max-width: 44rem;
+	margin: 0 auto;
+	padding: 28px 24px 64px;
+}
+
+.saldo-porque {
+	font-family: var(--mono);
+	font-size: 12px;
+	color: var(--ink-faint);
+	margin-right: auto;
+	white-space: nowrap;
+}
+
+.saldo-porque:hover { color: var(--credit); }
+
+.plano-porque {
+	margin-top: 16px;
+	border-top: 1px solid var(--rule);
+	padding-top: 10px;
+}
+
+.plano-porque summary,
+.detalhes-tecnicos summary {
+	font-family: var(--mono);
+	font-size: 12px;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--ink-soft);
+	cursor: pointer;
+}
+
+.plano-porque summary:hover,
+.detalhes-tecnicos summary:hover { color: var(--credit); }
+
+.plano-meta {
+	margin: 10px 0 0;
+	font-size: 14px;
+	color: var(--ink-soft);
+}
+
+.plano-meta a { color: var(--credit); }
+
+.plano-meta-suave { color: var(--ink-faint); }
+
+.planos-grade {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+	gap: 0 40px;
+}
+
+.plano-card {
+	border-top: 2px solid var(--ink);
+	padding-top: 14px;
+	margin-bottom: 36px;
+	min-width: 0;
+}
+
+.plano-card .rotulo-secao { border-bottom: 0; margin-bottom: 4px; padding-bottom: 0; }
+
+.plano-indisponivel { border-top-color: var(--rule); }
+
+.plano-desc {
+	margin: 0 0 12px;
+	font-size: 14px;
+	color: var(--ink-soft);
+}
+
+.plano-metricas {
+	display: flex;
+	gap: 24px;
+	margin: 0 0 12px;
+	padding-bottom: 10px;
+	border-bottom: 1px solid var(--rule);
+}
+
+.plano-metricas div { margin: 0; }
+.plano-metricas dd { margin: 2px 0 0; font-size: 17px; }
+
+.plano-transfers {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.plano-transfers li {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	flex-wrap: wrap;
+	padding: 6px 0;
+	border-bottom: 1px solid var(--rule);
+	font-size: 15px;
+}
+
+.plano-valor { margin-left: auto; white-space: nowrap; }
+
+.par-novo {
+	border: 1px solid var(--rule);
+	padding: 1px 6px;
+	letter-spacing: 0.08em;
+}
+
+.form-avancado { max-width: 26rem; }
+
+.extrato-saldo-bloco { margin-bottom: 28px; }
+
+.extrato-saldo {
+	font-size: 44px;
+	line-height: 1.05;
+	letter-spacing: -0.02em;
+	margin: 6px 0 0;
+}
+
+.extrato-total td {
+	border-bottom: 0;
+	border-top: 2px solid var(--ink);
+	font-weight: 600;
+}
+
 /* ------------------------------------------------------- home e página de erro */
 
 .sheet {

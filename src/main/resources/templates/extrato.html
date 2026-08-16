@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="robots" content="noindex, nofollow">
+	<meta name="referrer" content="no-referrer">
+	<title th:text="#{ui.extrato.titulo} + ' — ' + ${explanation.displayName()}">Extrato</title>
+	<link rel="stylesheet" th:href="@{/css/splitpix.css}">
+</head>
+<body>
+
+<header class="topo">
+	<div class="topo-inner">
+		<p class="brand" th:text="#{ui.app.nome}">SplitPix</p>
+		<h1 class="nome-grupo"
+			th:text="#{ui.extrato.titulo} + ' — ' + ${explanation.displayName()}">Extrato</h1>
+		<p class="convite">
+			<a class="link-voltar" th:href="@{/g/{id}(id=${view.group().id()})}"
+			   th:text="#{ui.planos.voltar}">voltar ao grupo</a>
+		</p>
+	</div>
+</header>
+
+<main class="folha">
+
+	<section class="bloco extrato-saldo-bloco">
+		<p class="rotulo-micro" th:text="#{ui.extrato.saldoAtual}">Saldo atual</p>
+		<p class="extrato-saldo mono"
+		   th:classappend="${explanation.balanceCents() > 0} ? 'credito' : (${explanation.balanceCents() < 0} ? 'debito' : 'zerado')">
+			<span class="moeda-pequena">R$</span><span
+				th:text="${@pageFormats.amount(explanation.balanceCents())}">0,00</span>
+		</p>
+	</section>
+
+	<section class="bloco">
+		<p class="vazio" th:if="${explanation.entries().isEmpty()}"
+		   th:text="#{ui.extrato.vazio}">Nenhum lançamento.</p>
+
+		<table class="livro" th:unless="${explanation.entries().isEmpty()}">
+			<tbody>
+			<tr th:each="entrada : ${explanation.entries()}">
+				<td class="livro-tipo rotulo-micro"
+					th:text="#{'ui.extrato.entrada.' + ${entrada.type()}}">tipo</td>
+				<td class="livro-descricao"
+					th:text="${entrada.description()} ?: ${entrada.counterpartyName()}">descrição</td>
+				<td class="livro-valor mono"
+					th:classappend="${entrada.amountCents() > 0} ? 'credito' : 'debito'"
+					th:text="${@pageFormats.amount(entrada.amountCents())}">0,00</td>
+			</tr>
+			<tr class="extrato-total">
+				<td class="livro-tipo rotulo-micro" th:text="#{ui.extrato.saldoAtual}">saldo</td>
+				<td class="livro-descricao"></td>
+				<td class="livro-valor mono"
+					th:classappend="${explanation.balanceCents() > 0} ? 'credito' : (${explanation.balanceCents() < 0} ? 'debito' : 'zerado')"
+					th:text="${@pageFormats.amount(explanation.balanceCents())}">0,00</td>
+			</tr>
+			</tbody>
+		</table>
+
+		<p class="nota-campo" th:text="#{ui.extrato.nota}">nota</p>
+	</section>
+
+</main>
+
+</body>
+</html>

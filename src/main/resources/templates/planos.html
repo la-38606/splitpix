@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="robots" content="noindex, nofollow">
+	<meta name="referrer" content="no-referrer">
+	<title th:text="#{ui.planos.titulo} + ' — ' + ${view.group().name()}">Estratégias</title>
+	<link rel="stylesheet" th:href="@{/css/splitpix.css}">
+</head>
+<body>
+
+<header class="topo">
+	<div class="topo-inner">
+		<p class="brand" th:text="#{ui.app.nome}">SplitPix</p>
+		<h1 class="nome-grupo" th:text="#{ui.planos.titulo}">Estratégias de quitação</h1>
+		<p class="convite">
+			<a class="link-voltar" th:href="@{/g/{id}(id=${view.group().id()})}"
+			   th:text="#{ui.planos.voltar}">voltar ao grupo</a>
+		</p>
+	</div>
+</header>
+
+<main class="folha-larga">
+
+	<p class="vazio" th:if="${settled}" th:text="#{ui.grupo.tudoQuitado}">Tudo quitado.</p>
+
+	<th:block th:unless="${settled}">
+
+		<section class="bloco">
+			<div class="planos-grade">
+				<article class="plano-card" th:each="plano : ${comparison.plans()}"
+						 th:insert="~{fragments/plano-card :: card(${plano}, null)}"></article>
+				<article class="plano-card plano-indisponivel" th:each="skip : ${comparison.skipped()}">
+					<h2 class="rotulo-secao" th:text="#{'ui.estrategia.' + ${skip.strategy()}}">estratégia</h2>
+					<p class="plano-desc" th:text="#{ui.planos.indisponivel}">Indisponível.</p>
+				</article>
+			</div>
+		</section>
+
+		<section class="bloco">
+			<details class="detalhes-tecnicos">
+				<summary th:text="#{ui.planos.detalhes}">Detalhes técnicos</summary>
+				<table class="livro">
+					<tbody>
+					<tr>
+						<td class="livro-tipo rotulo-micro" th:text="#{ui.planos.revisao}">revisão</td>
+						<td class="livro-descricao mono" th:text="${comparison.ledgerRevision()}">0</td>
+						<td class="livro-valor"></td>
+					</tr>
+					<tr th:each="plano : ${comparison.plans()}">
+						<td class="livro-tipo rotulo-micro" th:text="${plano.strategy()}">ENUM</td>
+						<td class="livro-descricao mono"
+							th:text="|exact=${plano.exact()} transfers=${plano.transferCount()} novelEdges=${plano.novelRelationshipEdges()}|">meta</td>
+						<td class="livro-valor mono" th:text="${@pageFormats.amount(plano.totalAmountCents())}">0,00</td>
+					</tr>
+					</tbody>
+				</table>
+				<p class="nota-campo" th:text="#{ui.planos.revisaoNota}">nota</p>
+			</details>
+		</section>
+
+		<section class="bloco">
+			<h2 class="rotulo-secao" th:text="#{ui.planos.avancado}">Opções avançadas</h2>
+			<form class="form form-avancado" method="get"
+				  th:action="@{/g/{id}/planos(id=${view.group().id()})}">
+				<label class="campo">
+					<span th:text="#{ui.planos.campoEstrategia}">Estratégia</span>
+					<select name="estrategia">
+						<option th:each="e : ${estrategias}" th:value="${e}"
+								th:text="#{'ui.estrategia.' + ${e}}"
+								th:selected="${customPlan != null && customPlan.plan().strategy() == e}">estratégia</option>
+					</select>
+				</label>
+				<label class="campo">
+					<span th:text="#{ui.planos.campoTeto}">Teto por pagamento</span>
+					<input type="text" name="teto" inputmode="decimal" placeholder="0,00">
+				</label>
+				<fieldset class="campo-duplo">
+					<legend th:text="#{ui.planos.campoVeto} + ' … ' + #{ui.planos.campoVetoPara} + ' …'">Proibir pagamento</legend>
+					<select name="vetadoDe">
+						<option value="" th:text="#{ui.planos.semVeto}">ninguém</option>
+						<option th:each="p : ${view.participants()}" th:value="${p.id()}"
+								th:text="${p.displayName()}">nome</option>
+					</select>
+					<select name="vetadoPara">
+						<option value="" th:text="#{ui.planos.semVeto}">ninguém</option>
+						<option th:each="p : ${view.participants()}" th:value="${p.id()}"
+								th:text="${p.displayName()}">nome</option>
+					</select>
+				</fieldset>
+				<p class="nota-campo" th:text="#{ui.planos.avancadoNota}">nota</p>
+				<button type="submit" class="botao-secundario" th:text="#{ui.planos.gerar}">Gerar plano</button>
+			</form>
+		</section>
+
+		<section class="bloco" th:if="${customPlan}">
+			<div class="planos-grade">
+				<article class="plano-card plano-resultado"
+						 th:insert="~{fragments/plano-card :: card(${customPlan.plan()}, #{ui.planos.resultado})}"></article>
+			</div>
+		</section>
+
+	</th:block>
+</main>
+
+</body>
+</html>

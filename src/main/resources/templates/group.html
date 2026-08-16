@@ -39,6 +39,9 @@
 		<ul class="saldos">
 			<li th:each="saldo : ${page.balances()}">
 				<span class="saldo-nome" th:text="${saldo.displayName()}">Nome</span>
+				<a class="saldo-porque"
+				   th:href="@{/g/{id}/extrato/{pid}(id=${page.group().id()}, pid=${saldo.participantId()})}"
+				   th:text="#{ui.saldo.porque}">por quê?</a>
 				<span class="saldo-cifra mono"
 					  th:classappend="${saldo.balanceCents() > 0} ? 'credito' : (${saldo.balanceCents() < 0} ? 'debito' : 'zerado')"
 					  th:text="${@pageFormats.amount(saldo.balanceCents())}">0,00</span>
@@ -90,6 +93,28 @@
 					</div>
 				</li>
 			</ol>
+
+			<details class="plano-porque" th:unless="${page.settled()}" th:with="plano=${page.plan().plan()}">
+				<summary th:text="#{ui.plano.porque}">Por que este plano?</summary>
+				<p class="plano-meta">
+					<span th:text="#{ui.plano.estrategia}">Estratégia</span>:
+					<strong th:text="#{'ui.estrategia.' + ${plano.strategy()}}">estratégia</strong>
+					<span class="plano-meta-suave" th:text="#{'ui.estrategia.desc.' + ${plano.strategy()}}">descrição</span>
+				</p>
+				<p class="plano-meta">
+					<span th:text="${plano.transferCount()}">0</span>
+					<span th:text="${plano.transferCount() == 1} ? #{ui.plano.pagamento} : #{ui.plano.pagamentos}">pagamentos</span><th:block
+						th:if="${plano.novelRelationshipEdges() > 0}">,
+					<span th:text="${plano.novelRelationshipEdges()}">0</span>
+					<span th:text="#{ui.plano.novosPares}">novos pares</span></th:block>.
+					<span th:if="${plano.novelRelationshipEdges() == 0}" th:text="#{ui.plano.semNovosPares}">Sem pares novos.</span>
+				</p>
+				<p class="plano-meta" th:text="${plano.exact()} ? #{ui.plano.exato} : #{ui.plano.heuristico}">garantia</p>
+				<p class="plano-meta">
+					<a th:href="@{/g/{id}/planos(id=${page.group().id()})}"
+					   th:text="#{ui.plano.comparar}">Comparar estratégias</a>
+				</p>
+			</details>
 		</section>
 
 		<section class="bloco">

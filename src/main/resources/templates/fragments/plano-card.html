@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<body>
+
+<!--/* One plan rendered as a card; used for the comparison and the constrained result. */-->
+<th:block th:fragment="card(plano, titulo)">
+	<h2 class="rotulo-secao">
+		<span th:if="${titulo}" th:text="${titulo} + ' — '">título</span><span
+			th:text="#{'ui.estrategia.' + ${plano.strategy()}}">estratégia</span>
+	</h2>
+	<p class="plano-desc" th:text="#{'ui.estrategia.desc.' + ${plano.strategy()}}">descrição</p>
+	<dl class="plano-metricas">
+		<div>
+			<dt class="rotulo-micro" th:text="#{ui.planos.transferencias}">Pagamentos</dt>
+			<dd class="mono" th:text="${plano.transferCount()}">0</dd>
+		</div>
+		<div>
+			<dt class="rotulo-micro" th:text="#{ui.planos.paresNovos}">Pares novos</dt>
+			<dd class="mono" th:text="${plano.novelRelationshipEdges()}">0</dd>
+		</div>
+		<div>
+			<dt class="rotulo-micro" th:text="#{ui.planos.garantia}">Garantia</dt>
+			<dd th:text="${plano.exact()} ? #{ui.planos.garantia.exata} : #{ui.planos.garantia.heuristica}">garantia</dd>
+		</div>
+	</dl>
+	<ul class="plano-transfers">
+		<li th:each="t : ${plano.transfers()}">
+			<span th:text="${t.payerName()}">De</span>
+			<span class="seta" aria-hidden="true">→</span>
+			<span th:text="${t.recipientName()}">Para</span>
+			<span class="par-novo rotulo-micro" th:if="${t.novelRelationship()}"
+				  th:text="#{ui.plano.parNovo}">par novo</span>
+			<span class="plano-valor mono">
+				<span class="moeda-pequena">R$</span><span
+					th:text="${@pageFormats.amount(t.amountCents())}">0,00</span>
+			</span>
+		</li>
+	</ul>
+</th:block>
+
+</body>
+</html>

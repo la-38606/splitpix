@@ -385,6 +385,121 @@ class WebFlowTest extends ApiTestSupport {
 		assertThat(settlements).isEqualTo(2);
 	}
 
+	@Test
+	void groupPage_disclosesPlanReasoningAndLinksToDeeperViews() throws Exception {
+		Session session = createGroupViaForm();
+		addParticipantViaForm(session, "Ana");
+
+		String empty = mockMvc.perform(get("/g/" + session.groupId()).cookie(session.cookie()))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString();
+		mockMvc.perform(post("/g/" + session.groupId() + "/despesas")
+				.cookie(session.cookie())
+				.param("idempotencyKey", expenseFormKey(empty))
+				.param("description", "Mercado")
+				.param("paidByParticipantId", creatorIdOf(session, empty))
+				.param("totalReais", "100,00")
+				.param("share-" + creatorIdOf(session, empty), "50,00")
+				.param("share-" + otherIdOf(session, empty), "50,00"))
+				.andExpect(status().is3xxRedirection());
+
+		String html = mockMvc.perform(get("/g/" + session.groupId()).cookie(session.cookie()))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString();
+
+		// Progressive disclosure: the reasoning lives in a collapsed <details>,
+		// and every balance row links to its statement page.
+		assertThat(html)
+				.contains("Por que este plano?")
+				.contains("/g/" + session.groupId() + "/planos")
+				.contains("/g/" + session.groupId() + "/extrato/");
+		// No internal identifiers on the default page.
+		assertThat(html).doesNotContain("RELATIONSHIP_AWARE").doesNotContain("GREEDY");
+	}
+
+	@Test
+	void plansPage_comparesStrategies_andHonorsTheAdvancedForm() throws Exception {
+		Session session = createGroupViaForm();
+		addParticipantViaForm(session, "Ana");
+
+		String groupHtml = mockMvc.perform(get("/g/" + session.groupId()).cookie(session.cookie()))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString();
+		mockMvc.perform(post("/g/" + session.groupId() + "/despesas")
+				.cookie(session.cookie())
+				.param("idempotencyKey", expenseFormKey(groupHtml))
+				.param("description", "Mercado")
+				.param("paidByParticipantId", creatorIdOf(session, groupHtml))
+				.param("totalReais", "100,00")
+				.param("share-" + creatorIdOf(session, groupHtml), "50,00")
+				.param("share-" + otherIdOf(session, groupHtml), "50,00"))
+				.andExpect(status().is3xxRedirection());
+
+		String plans = mockMvc.perform(get("/g/" + session.groupId() + "/planos").cookie(session.cookie()))
+				.andExpect(status().isOk())
+				.andExpect(view().name("planos"))
+				.andReturn().getResponse().getContentAsString();
+		assertThat(plans)
+				.contains("Rápido")
+				.contains("Menos pagamentos")
+				.contains("Preservar relações")
+				// The technical panel exposes the internals the default page hides.
+				.contains("MIN_TRANSFERS")
+				.contains("Revisão do livro");
+
+		// Advanced form round-trips: parsed money input, GET query params,
+		// result rendered as its own card. (Cap semantics are pinned in
+		// SettlementPlannerTest and SettlementPlanApiTest.)
+		String constrained = mockMvc.perform(get("/g/" + session.groupId() + "/planos")
+				.cookie(session.cookie())
+				.param("estrategia", "MIN_TRANSFERS")
+				.param("teto", "60,00"))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString();
+		assertThat(constrained).contains("Plano com restrições");
+
+		// An infeasible restriction is a readable error page, not a 500.
+		mockMvc.perform(get("/g/" + session.groupId() + "/planos")
+				.cookie(session.cookie())
+				.param("estrategia", "MIN_TRANSFERS")
+				.param("vetadoDe", otherIdOf(session, groupHtml))
+				.param("vetadoPara", creatorIdOf(session, groupHtml)))
+				.andExpect(status().isConflict())
+				.andExpect(view().name("erro"))
+				.andExpect(content().string(
+						org.hamcrest.Matchers.containsString("NO_FEASIBLE_SETTLEMENT_PLAN")));
+	}
+
+	@Test
+	void statementPage_reconcilesWithTheRenderedBalance() throws Exception {
+		Session session = createGroupViaForm();
+		addParticipantViaForm(session, "Ana");
+
+		String groupHtml = mockMvc.perform(get("/g/" + session.groupId()).cookie(session.cookie()))
+				.andExpect(status().isOk())
+				.andReturn().getResponse().getContentAsString();
+		mockMvc.perform(post("/g/" + session.groupId() + "/despesas")
+				.cookie(session.cookie())
+				.param("idempotencyKey", expenseFormKey(groupHtml))
+				.param("description", "Mercado")
+				.param("paidByParticipantId", creatorIdOf(session, groupHtml))
+				.param("totalReais", "100,00")
+				.param("share-" + creatorIdOf(session, groupHtml), "30,00")
+				.param("share-" + otherIdOf(session, groupHtml), "70,00"))
+				.andExpect(status().is3xxRedirection());
+
+		String statement = mockMvc.perform(get("/g/" + session.groupId() + "/extrato/"
+				+ otherIdOf(session, groupHtml)).cookie(session.cookie()))
+				.andExpect(status().isOk())
+				.andExpect(view().name("extrato"))
+				.andReturn().getResponse().getContentAsString();
+		assertThat(statement)
+				.contains("Extrato de saldo")
+				.contains("Mercado")
+				.contains("parte na despesa")
+				.contains("−70,00");
+	}
+
 	/** Extracts each payment form's hidden fields, in document order. */
 	private java.util.List<java.util.Map<String, String>> paymentForms(String html) {
 		java.util.List<java.util.Map<String, String>> forms = new java.util.ArrayList<>();
