@@ -535,6 +535,7 @@ button:focus-visible, a:focus-visible {
 }
 
 .plano-metricas div { margin: 0; }
+.plano-metricas dt { white-space: nowrap; }
 .plano-metricas dd { margin: 2px 0 0; font-size: 17px; }
 
 .plano-transfers {
@@ -570,6 +571,12 @@ button:focus-visible, a:focus-visible {
 	line-height: 1.05;
 	letter-spacing: -0.02em;
 	margin: 6px 0 0;
+}
+
+/* Statement labels are full phrases, not the history page's one-worders. */
+.extrato-livro .livro-tipo {
+	width: 11rem;
+	white-space: normal;
 }
 
 .extrato-total td {

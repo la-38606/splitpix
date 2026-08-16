@@ -37,7 +37,7 @@
 		<p class="vazio" th:if="${explanation.entries().isEmpty()}"
 		   th:text="#{ui.extrato.vazio}">Nenhum lançamento.</p>
 
-		<table class="livro" th:unless="${explanation.entries().isEmpty()}">
+		<table class="livro extrato-livro" th:unless="${explanation.entries().isEmpty()}">
 			<tbody>
 			<tr th:each="entrada : ${explanation.entries()}">
 				<td class="livro-tipo rotulo-micro"
