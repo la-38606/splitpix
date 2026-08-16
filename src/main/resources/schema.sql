@@ -9,9 +9,10 @@
 --     is DEFERRABLE INITIALLY DEFERRED: group deletion cascades cleanly (nothing
 --     dangles at commit) while a lone participant delete still fails instead of
 --     silently corrupting the zero-sum invariant.
---   * Amounts are capped at 10^12 centavos so the balance aggregate always fits
---     what the mapper can read back: SUM(bigint) returns numeric in PostgreSQL,
---     so an uncapped group would sum past Long.MAX_VALUE and fail every read.
+--   * Amounts are capped at 10^12 centavos: SUM(bigint) returns numeric in
+--     PostgreSQL, so an uncapped group could sum past Long.MAX_VALUE and fail
+--     every read. The cap bounds each amount, not the sum — overflow would
+--     still need ~9.2 million maximum-value rows in one group.
 --   * pix_key_type is CHECK-constrained; an out-of-enum row would otherwise break
 --     every read of its group at the RowMapper.
 

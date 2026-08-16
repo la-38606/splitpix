@@ -33,6 +33,6 @@ no lock.
 
 All writes in one group serialize; a five-person dinner never notices, a
 thousand-member group would. In exchange, the no-over-settlement invariants
-have one-paragraph proofs and deterministic tests
-(`SettlementConcurrencyTest`, `ExpenseLockTest`). No deadlock is constructible:
+have one-paragraph proofs — deterministic lock pins in `GroupLockTest`, and
+a genuine two-thread race demonstration in `SettlementConcurrencyTest`. No deadlock is constructible:
 the only exclusive lock is the group row, always taken before any insert.

@@ -5,7 +5,7 @@ Status: accepted
 ## Context
 
 The two properties this system depends on most are exactly when a lock is
-taken and exactly what the balance aggregate computes. Seven tables, no graph
+taken and exactly what the balance aggregate computes. Five tables, no graph
 of entities, no lazy loading needs.
 
 ## Decision
@@ -19,7 +19,7 @@ via `@Transactional` on service methods; locking via an explicit
 - **JPA/Hibernate.** Locking becomes `@Lock` annotations and flush-timing
   questions; the balance aggregate becomes JPQL or a native-query escape hatch
   anyway; the persistence context adds failure modes (lazy init, detached
-  entities) with no payoff at seven tables.
+  entities) with no payoff at five tables.
 - **jOOQ.** Closest fit philosophically, but adds code generation and a
   dependency for what fifteen hand-written statements cover.
 

@@ -215,7 +215,7 @@ Reads take no lock. `GET /balances` runs the single aggregate of §4.3; `GET /su
 
 **Decision.** Plain SQL through `JdbcTemplate`, with `RowMapper`s written by hand.
 
-**Alternatives rejected.** JPA/Hibernate was rejected because the two properties that matter most here — exactly when a lock is taken and exactly what the balance aggregate is — become implicit under an ORM (G5), and because lazy loading and the persistence context introduce failure modes disproportionate to a seven-table schema.
+**Alternatives rejected.** JPA/Hibernate was rejected because the two properties that matter most here — exactly when a lock is taken and exactly what the balance aggregate is — become implicit under an ORM (G5), and because lazy loading and the persistence context introduce failure modes disproportionate to a five-table schema.
 
 **Consequences.** Mapping is manual and adding a column touches the record, the mapper, and the insert. The upside is that every statement the system issues is visible in the repository classes.
 
@@ -357,7 +357,7 @@ The strictest contract in the system. Preconditions: the input sums to zero. Pos
 
 `ApiTestSupport` is the shared base for API tests; sharing one Spring context and one container across subclasses is deliberate, since each distinct annotation combination forks a new context and a new PostgreSQL container. `@MockitoSpyBean` on a repository is the seam used to force failures that cannot be produced through the API — rollback tests let the real insert execute and then throw, because a test that mocks the insert away would pass without any transaction at all.
 
-`ExpenseLockTest` deserves mention as a boundary of a different kind: it holds the group lock inside a paused transaction and asserts the second request has not completed, because a barrier-synchronized race passes in a warm test context even with the lock removed.
+`GroupLockTest` deserves mention as a boundary of a different kind: it holds the group lock inside a paused transaction and asserts the second request has not completed, because a barrier-synchronized race passes in a warm test context even with the lock removed.
 
 ---
 
