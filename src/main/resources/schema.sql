@@ -1,4 +1,4 @@
--- SplitPix schema (design doc v2.1 section 10, hardened after adversarial review).
+-- SplitPix schema (design doc v2.1 section 10, plus the hardening noted below).
 -- Applied idempotently at startup via spring.sql.init; converted to Flyway V1__init.sql before hosting (addendum 35.4).
 -- All monetary values are integer centavos (BIGINT). Floating point is never used for money.
 --
