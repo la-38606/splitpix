@@ -14,7 +14,7 @@ refuse. The threshold itself also has to come from somewhere.
 Both thresholds are measured, not chosen by feel: 200 randomized adversarial
 instances per configuration (values drawn to make zero-sum subsets rare) on a
 laptop put the worst case at 59 ms for ten nonzero balances without a cap and
-136 ms for eight with a per-transfer cap. The limits are ten and eight; past
+136 ms for eight with a per-edge amount cap. The limits are ten and eight; past
 them the API answers 400 `UNSUPPORTED_OPTIMIZATION_SIZE`. A capped search
 gets the lower bound because a saturating move zeroes nobody, so the memo key
 must include used edges and states repeat far less.

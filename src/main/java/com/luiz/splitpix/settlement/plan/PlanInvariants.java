@@ -37,7 +37,7 @@ public final class PlanInvariants {
 					"transfer uses a forbidden pair");
 			check(constraints.maxTransferCents() == null
 					|| transfer.amountCents() <= constraints.maxTransferCents(),
-					"transfer exceeds the per-transfer cap");
+					"transfer exceeds the edge amount cap");
 			check(seenPairs.add(new SettlementConstraints.Pair(
 					transfer.payerParticipantId(), transfer.recipientParticipantId())),
 					"duplicate payer-recipient pair");

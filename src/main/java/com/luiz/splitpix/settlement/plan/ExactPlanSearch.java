@@ -29,10 +29,10 @@ final class ExactPlanSearch {
 
 	/**
 	 * Refusal thresholds, counted in nonzero balances. The search is
-	 * exponential, and a per-transfer cap makes it worse: a capped move can
+	 * exponential, and an edge amount cap makes it worse: a capped move can
 	 * saturate an edge without zeroing anyone, so the memo key must include
 	 * used edges and states repeat far less. Both bounds are measured, not
-	 * guessed — see PlanSearchPropertyTest.worstCasesStayWithinBudget and
+	 * guessed — see PlanSearchPropertyTest.worstCasesAtTheThreshold and
 	 * docs/design.md section 10.6.
 	 */
 	static final int MAX_NONZERO_BALANCES = 10;
@@ -77,7 +77,7 @@ final class ExactPlanSearch {
 	 * @param balances nonzero balances in a deterministic order; must sum to zero
 	 * @param allowed  allowed[payer][recipient], already excluding forbidden pairs
 	 * @param related  existing-relationship matrix, symmetric
-	 * @param capCents per-transfer cap, 0 for none
+	 * @param capCents cap on the amount of any payer→recipient edge, 0 for none
 	 * @param novelFirst true for RELATIONSHIP_AWARE's lexicographic objective
 	 * @throws ConflictException with NO_FEASIBLE_SETTLEMENT_PLAN when the
 	 *         constraints admit no plan

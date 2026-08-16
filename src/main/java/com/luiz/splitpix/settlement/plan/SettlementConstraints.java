@@ -6,7 +6,9 @@ import java.util.UUID;
 /**
  * Request-time restrictions on the settlement graph. Forbidden pairs are
  * directed: forbidding A→B still allows B→A. {@code maxTransferCents} caps
- * each individual transfer; null means uncapped.
+ * the amount of any payer→recipient edge — a pair appears at most once in a
+ * plan, so a capped debt is never split into installments; null means
+ * uncapped.
  */
 public record SettlementConstraints(
 		Set<Pair> forbiddenPairs,

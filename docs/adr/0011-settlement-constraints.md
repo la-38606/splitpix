@@ -18,7 +18,7 @@ Exactly two constraint types, both enforced by the exact search core:
   the more expressive primitive (the symmetric case is two entries), and the
   payer/recipient asymmetry is real — "Diego shouldn't have to pay Ana" says
   nothing about Ana paying Diego.
-- **Per-transfer cap** (`maxTransferCents`). A plan is a list of payment
+- **Per-edge amount cap** (`maxTransferCents`). A plan is a list of payment
   instructions with at most one instruction per (payer, recipient) pair, so
   the cap can make a two-person debt genuinely infeasible. That is the
   correct reading: "pay the same person four times" is not a plan anyone

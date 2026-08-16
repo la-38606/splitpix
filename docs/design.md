@@ -557,7 +557,7 @@ on an Apple-silicon laptop:
 | Configuration | Worst case |
 |---|---|
 | 10 nonzero balances, no cap | 59 ms |
-| 8 nonzero balances, per-transfer cap | 136 ms |
+| 8 nonzero balances, per-edge amount cap | 136 ms |
 | 12 nonzero balances, no cap | exceeds the node budget |
 
 Hence the limits: **10 nonzero balances** for exact strategies, **8 with a
@@ -571,7 +571,8 @@ inside the budget.
 
 ### 10.7 Constraints
 
-Two types (ADR 0011): directed forbidden pairs and a per-transfer cap. Both
+Two types (ADR 0011): directed forbidden pairs and a cap on the amount a
+payer→recipient edge may carry. Both
 prune moves inside the search, so satisfaction is by construction; both are
 re-checked by `PlanInvariants` on the way out. A plan carries at most one
 instruction per payer-recipient pair, so a cap below a two-person debt is
@@ -586,8 +587,8 @@ than none.
 Three independent oracles, none sharing code with the solver:
 
 1. **Partition bound.** For random vectors up to n = 8, an independent
-   subset DP computes n − max zero-sum partition — the closed-form minimum —
-   and the solver's transfer count must equal it (300 seeds).
+   subset DP computes n − max zero-sum partition, which characterizes the
+   true minimum, and the solver's transfer count must equal it (300 seeds).
 2. **Exhaustive enumeration.** For random small instances with random
    relationships, forbidden pairs and caps, a memo-less enumeration of the
    entire move space computes the true lexicographic optimum — and the true
@@ -642,7 +643,7 @@ specific product; competitors' internals are not verifiable from here.
 | Concurrent writes | last-write-wins or row-level accidents | serialized per group by an explicit lock, with invariants I4/I5/I8 checked inside it (§4.2) |
 | Retries | duplicate rows or client-side dedup | idempotency key + request hash; replay is byte-identical, mutation is a 409 (§4.5) |
 | Settlement output | one algorithm, usually greedy, often labeled "simplify debts" | three strategies with declared objectives; exactness is a tested claim, not a label (§10) |
-| Constraints | none | forbidden pairs and per-transfer caps, enforced exactly or refused (§10.7) |
+| Constraints | none | forbidden pairs and per-edge amount caps, enforced exactly or refused (§10.7) |
 | Explainability | a number | any balance decomposes into ledger entries that provably sum to it (§11); any plan states its strategy, guarantee and novel-edge cost |
 | Payments | some execute payments | payment instructions only, never execution or verification (§1.4) |
 | Testing | mocked persistence | real PostgreSQL, deterministic lock tests, seeded property tests, independent brute-force oracles (§7.4, §10.8) |

@@ -17,9 +17,10 @@ import org.junit.jupiter.api.Test;
 /**
  * Randomized cross-checks of the settlement optimizers, deterministic via
  * fixed seeds. The exact search is validated two independent ways: against
- * the closed-form minimum (n minus the largest zero-sum partition, computed
- * here by a subset DP that shares no code with the solver) and against
- * exhaustive enumeration of the same plan space without memoization.
+ * an independent characterization of the minimum (n minus the largest
+ * zero-sum partition, computed here by a subset DP that shares no code with
+ * the solver) and against exhaustive enumeration of the same plan space
+ * without memoization.
  */
 class PlanSearchPropertyTest {
 

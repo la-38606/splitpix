@@ -8,6 +8,12 @@ Pix supports five key types; one of them is the CPF, Brazil's national taxpayer
 identifier. SplitPix groups are protected by a shared invite link, not by
 authentication: everyone in a group sees every stored key.
 
+The CPF is a lifelong identifier tied to bank accounts, credit history and
+tax filings, and it is personal data under the LGPD (Lei 13.709/2018,
+Brazil's data protection law) — whoever stores it takes on controller
+obligations around purpose, retention and disclosure. Those obligations sit
+badly on a system that deliberately has no identity layer at all.
+
 ## Decision
 
 `PixKeyType` has three constants: `EMAIL`, `PHONE`, `RANDOM`. CPF (and CNPJ) do

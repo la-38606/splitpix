@@ -115,9 +115,10 @@ curl -X POST "localhost:8080/api/v1/groups/$GROUP/settlement-plan?token=$TOKEN" 
 ```
 
 - `forbiddenPairs` is directed: forbidding Diego→Ana still allows Ana→Diego.
-- `maxTransferCents` caps each instruction. A plan holds at most one
-  instruction per payer-recipient pair, so a cap below a two-person debt makes
-  settlement genuinely infeasible.
+- `maxTransferCents` is the maximum amount allowed on a single
+  payer→recipient edge. A plan holds at most one instruction per pair — a
+  debt is never split into installments to the same recipient — so a cap
+  below a two-person debt makes settlement genuinely infeasible.
 - Constraints that admit no plan are a 409 `NO_FEASIBLE_SETTLEMENT_PLAN`.
 
 ### Comparison

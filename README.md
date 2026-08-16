@@ -5,11 +5,10 @@
 SplitPix is a shared-expense ledger that treats settling up as an
 optimization problem. Underneath, balances derive from an append-only ledger
 and every financial invariant survives concurrent writes and retries. On
-top sits the part that makes the project worth reading: several different
-repayment plans can settle the same group, and SplitPix computes them under
-selectable objectives (fewest transfers, or fewest new payment
-relationships, or a fast heuristic), labeling each with what it does and
-does not guarantee. Java 21, Spring Boot, PostgreSQL, hand-written SQL.
+top, several different repayment plans can settle the same group, and
+SplitPix computes them under selectable objectives (fewest transfers, or
+fewest new payment relationships, or a fast heuristic), labeling each with
+what it does and does not guarantee. Java 21, Spring Boot, PostgreSQL, hand-written SQL.
 **It does not move money.** Plans carry each recipient's Pix key; transfers
 happen in the payer's bank app.
 
@@ -37,7 +36,7 @@ Regenerate locally:
 ## Why build another expense splitter?
 
 Splitting one bill is arithmetic. Keeping a month of shared expenses correct
-is a small distributed-systems problem wearing a consumer UI: requests get
+is a concurrency and accounting problem wearing a consumer UI: requests get
 retried, two people hit save at the same moment, and last week's typo needs
 a correction that doesn't rewrite history. Solve all of that and a second
 problem is still standing. Who should actually pay whom?
@@ -85,14 +84,16 @@ back-button edit surfaces as a 409. Composite foreign keys mean a row
 physically cannot reference a participant from another group.
 
 The optimizer is a separate pure layer. Both exact strategies run one
-memoized search over basic plans; tests cross-check it against a closed-form
-bound and against exhaustive enumeration, and a production invariant checker
+memoized search over basic plans; tests cross-check it against an independent
+subset-DP oracle and against exhaustive enumeration, and a production invariant checker
 re-applies every plan before it leaves the service. Past ten nonzero
-balances (eight when a per-transfer cap is set) the exact strategies answer
+balances (eight when an amount cap is set) the exact strategies answer
 400 instead of quietly handing back a heuristic — both limits came out of
 benchmarking, with a deterministic search budget behind them. Requests can
-also carry constraints: forbid a payer→recipient pair, or cap the size of
-any single transfer, and when nothing satisfies them the answer is a 409
+also carry constraints: forbid a payer→recipient pair, or cap the amount a
+single payer→recipient payment may carry (a plan holds one payment per
+pair, so a cap is never met by splitting a debt into installments). When
+nothing satisfies them the answer is a 409
 `NO_FEASIBLE_SETTLEMENT_PLAN`. Algorithms, proofs and worked examples:
 [docs/design.md §10](docs/design.md).
 
@@ -131,20 +132,14 @@ independent brute-force oracles. Full API with curl examples:
 
 This is a portfolio project, not a payment service. Nothing here executes or
 verifies a transfer; marking a payment complete is a claim by the person who
-made it, and every demo runs on synthetic identities.
+made it, and every demo runs on synthetic identities — no CPF, no bank
+account, no real contact data required anywhere.
 
-One privacy decision deserves spelling out. Pix accepts the CPF, Brazil's
-national taxpayer number, as a key type. The CPF is a lifelong identifier
-tied to bank accounts, credit history and tax filings, and it qualifies as
-personal data under the LGPD (Lei 13.709/2018, Brazil's data protection
-law), so whoever stores it takes on controller obligations around purpose,
-retention and disclosure. A system whose entire access model is a shareable
-invite link, where everyone in the group can read every stored key, has no
-business holding a national ID. The CPF key type therefore does not exist
-here, and the format validation even catches a CPF smuggled in as a RANDOM
-key: an EVP key is a UUID, so bare digits never match
-([ADR 0004](docs/adr/0004-no-cpf-pix-keys.md)). Email and phone keys are
-accepted; every value in the demos is fictional.
+One deliberate omission: Pix accepts the CPF, Brazil's national ID, as a key
+type, but a system whose only access control is a shareable invite link has
+no business storing a lifelong identifier, so that key type does not exist
+here. The full reasoning, LGPD included, is in
+[ADR 0004](docs/adr/0004-no-cpf-pix-keys.md).
 
 ## Limitations
 
@@ -152,7 +147,8 @@ accepted; every value in the demos is fictional.
   everything, stored Pix keys included. No accounts in v1.
 - Append-only means append-only: amounts get corrected with compensating
   entries, and a mistyped Pix key stays wrong.
-- Exact optimization stops at ten nonzero balances (eight with a cap). Larger
+- Exact optimization stops at ten nonzero balances (eight with an amount
+  cap). Larger
   groups fall back to the greedy plan by default, and get a 400 if they ask
   for an exact strategy outright.
 
