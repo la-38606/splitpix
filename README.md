@@ -18,6 +18,21 @@ happen in the payer's bank app.
   <img src="docs/screenshots/group-mobile.png" alt="Group ledger, mobile" width="24%">
 </p>
 
+## Demo
+
+One minute of the real application on synthetic data: expenses, balances, a
+suggested plan, the statement behind a balance, three strategies disagreeing
+about the same balances, and a payment recorded over Pix.
+
+[<img src="docs/demo/splitpix-demo-thumb.png" alt="Demo video: strategy comparison" width="70%">](docs/demo/splitpix-demo.webm)
+
+The recording is generated, not screen-captured — a Playwright walkthrough
+over a deterministic seed, so it can be reproduced from a clean checkout:
+
+```bash
+./scripts/record-demo.sh
+```
+
 ## Why build another expense splitter?
 
 Splitting one bill is arithmetic. Keeping a month of shared expenses correct
