@@ -579,6 +579,14 @@ button:focus-visible, a:focus-visible {
 	white-space: normal;
 }
 
+/* Same problem, technical panel: strategy enum names and "Revisão do livro"
+   overflow the history table's 5.5rem type column under fixed layout. */
+.tecnico-livro .livro-tipo {
+	width: 12rem;
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+
 .extrato-total td {
 	border-bottom: 0;
 	border-top: 2px solid var(--ink);
