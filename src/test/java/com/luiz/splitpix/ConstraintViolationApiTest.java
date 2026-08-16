@@ -20,7 +20,7 @@ import tools.jackson.databind.JsonNode;
 
 /**
  * The database is the second line of defense: when a constraint fires despite
- * the service-layer pre-check, the response must still honor the section 16
+ * the service-layer pre-check, the response must still honor the error-contract
  * contract, and the log must not carry the values the constraint rejected
  * (PostgreSQL puts them on the Detail line — sections 22 and 23 forbid logging
  * Pix keys).

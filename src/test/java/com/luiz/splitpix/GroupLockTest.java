@@ -20,7 +20,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import tools.jackson.databind.JsonNode;
 
 /**
- * Pins the expense-path group lock (design doc 13.3) deterministically.
+ * Pins the expense-path group lock (docs/design.md section 4.2) deterministically.
  *
  * A barrier-synchronized race is not enough: in a warm shared test context both
  * transactions can complete before they ever overlap, so the race test passes

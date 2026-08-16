@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import tools.jackson.databind.JsonNode;
 
-/** Pins the section 16 error mappings that no happy-path test exercises. */
+/** Pins the docs/design.md section 4.9 error mappings that no happy-path test exercises. */
 class NegativePathApiTest extends ApiTestSupport {
 
 	@Test
@@ -53,7 +53,7 @@ class NegativePathApiTest extends ApiTestSupport {
 
 	@Test
 	void cpfPixKeyType_isRejected() throws Exception {
-		// CPF is deliberately excluded from the enum (design doc 10.2).
+		// CPF is deliberately excluded from the enum (ADR 0004).
 		JsonNode group = createGroup();
 		postParticipant(group.get("groupId").asText(), group.get("inviteToken").asText(), """
 				{"displayName": "Ana", "pixKeyType": "CPF", "pixKeyValue": "12345678900"}

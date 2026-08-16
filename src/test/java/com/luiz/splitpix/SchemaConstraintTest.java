@@ -12,7 +12,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 /**
- * Pins the database constraints as a real second line of defense (section 3.2):
+ * Pins the database constraints as a real second line of defense (docs/design.md, goal G4):
  * each test violates a constraint directly, below the service layer.
  */
 @Import(TestcontainersConfiguration.class)

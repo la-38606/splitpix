@@ -22,8 +22,8 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
- * Maps exceptions to the {code, message} error contract of section 16.
- * Codes are stable English identifiers; messages are pt-BR (section 21).
+ * Maps exceptions to the {code, message} error contract of docs/design.md
+ * section 4.9. Codes are stable English identifiers; messages are pt-BR.
  * Tests assert on codes, never on localized message text.
  *
  * Message resolution deliberately has no fallback default: a missing bundle key

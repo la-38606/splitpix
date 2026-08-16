@@ -11,7 +11,7 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class SettlementRepository {
 
-	/** The MVP stores only completed settlements (design doc 10.5). */
+	/** The MVP stores only completed settlements (docs/design.md section 6.5). */
 	public static final String STATUS_COMPLETED = "COMPLETED";
 
 	private static final RowMapper<Settlement> MAPPER = (rs, rowNum) -> new Settlement(

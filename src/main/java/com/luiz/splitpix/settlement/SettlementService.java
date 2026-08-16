@@ -32,7 +32,7 @@ public class SettlementService {
 	}
 
 	/**
-	 * Settlement transaction (design doc 13.2) under the group lock (13.3):
+	 * Settlement transaction under the group lock (docs/design.md sections 3.2 and 4.2):
 	 * token check, lock, idempotency check, then balance recomputation INSIDE
 	 * the transaction — invariants 4 and 5 hold because no other accounting
 	 * write can commit between validation and insert.

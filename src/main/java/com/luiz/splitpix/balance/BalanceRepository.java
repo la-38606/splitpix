@@ -15,7 +15,7 @@ public class BalanceRepository {
 			rs.getLong("balance_cents"));
 
 	/**
-	 * Balance derivation as one aggregate (design doc sections 11 and 28.1).
+	 * Balance derivation as one aggregate (docs/design.md section 4.3).
 	 * Four legs via UNION ALL, per participant p:
 	 *   + expenses paid by p        - shares assigned to p
 	 *   + settlements sent by p     - settlements received by p

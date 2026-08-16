@@ -44,7 +44,7 @@ public class ExpenseService {
 	}
 
 	/**
-	 * Expense creation transaction (design doc 13.1) under the group lock
+	 * Expense creation transaction under the group lock (docs/design.md sections 3.2 and 4.2)
 	 * (13.3): token check, lock, idempotency check, validation, inserts —
 	 * all in one transaction. The lock serializes every accounting write in
 	 * the group, so the idempotency check is race-free once it holds.

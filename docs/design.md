@@ -429,7 +429,7 @@ Violations here are silent and expensive. Nothing in the type system enforces th
 | Group-existence oracle | `GET` returns 404 before checking the token, so an unauthenticated caller can distinguish existing from non-existent group ids. Accepted: ids are random UUIDs and existence alone reveals nothing. |
 | Unknown-path responses on page routes | A URL matching no controller returns the JSON error contract rather than an HTML page, because advice scoped to a package cannot apply when no controller was selected (§4.9). |
 | Observability | Only errors are logged. No request id, no metrics, no per-operation success logging. |
-| `PARTICIPANT_NOT_FOUND` | No such code exists; an unknown participant id is reported as 400 `PARTICIPANT_NOT_IN_GROUP`. Recorded because the v2.1 document promised a 404. |
+| `PARTICIPANT_NOT_FOUND` | No such code exists; an unknown participant id is reported as 400 `PARTICIPANT_NOT_IN_GROUP`. Recorded because an earlier design revision promised a 404. |
 
 ---
 

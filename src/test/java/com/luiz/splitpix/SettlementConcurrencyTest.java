@@ -15,7 +15,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 
 /**
- * The critical concurrency test (design doc 18.4) and invariant 8: competing
+ * The critical concurrency test for invariant I8 (docs/design.md section 8): competing
  * settlement requests serialized by the group lock can never over-settle.
  */
 class SettlementConcurrencyTest extends ApiTestSupport {

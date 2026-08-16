@@ -36,7 +36,7 @@ public class GroupRepository {
 	}
 
 	/**
-	 * Serializes all writes within a group (design doc 13.3). Every write path
+	 * Serializes all writes within a group (docs/design.md section 4.2). Every write path
 	 * that changes accounting state must call this inside its transaction.
 	 * Throws instead of silently degrading to a no-op lock if the row is gone.
 	 */

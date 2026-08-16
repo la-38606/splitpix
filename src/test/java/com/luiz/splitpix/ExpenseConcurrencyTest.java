@@ -12,7 +12,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.JsonNode;
 
 /**
- * Pins the group lock (design doc 13.3): two concurrent requests with the same
+ * Pins the group lock (docs/design.md section 4.2): two concurrent requests with the same
  * idempotency key must produce exactly one expense — one 201, one 200 replay.
  * Without the lock the loser would hit unique_expense_request and surface a
  * 409 CONSTRAINT_VIOLATION instead of the replay.

@@ -13,7 +13,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import tools.jackson.databind.JsonNode;
 
 /**
- * Invariant 7 for the expense transaction (design doc 13.1): the expense insert
+ * Invariant I7 for the expense transaction (docs/design.md section 8): the expense insert
  * really executes, then share insertion fails — the whole transaction rolls
  * back and no expense row survives.
  */
