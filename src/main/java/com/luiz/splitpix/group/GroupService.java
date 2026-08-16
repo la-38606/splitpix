@@ -11,6 +11,7 @@ import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -44,8 +45,12 @@ public class GroupService {
 		return new CreateGroupResult(groupId, inviteToken, creatorId);
 	}
 
-	/** Group plus participants in one transaction: one token check, one consistent snapshot. */
-	@Transactional(readOnly = true)
+	/**
+	 * Group plus participants: one token check, one consistent snapshot. The
+	 * snapshot claim needs REPEATABLE_READ — under READ COMMITTED each of the
+	 * two statements would read its own snapshot.
+	 */
+	@Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
 	public GroupView getView(UUID groupId, String inviteToken) {
 		Group group = requireGroup(groupId, inviteToken);
 		return new GroupView(group, participantRepository.findByGroupId(groupId));
