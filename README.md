@@ -3,11 +3,11 @@
 [![CI](https://github.com/la-38606/splitpix/actions/workflows/ci.yml/badge.svg)](https://github.com/la-38606/splitpix/actions/workflows/ci.yml)
 
 Splitting group expenses in Brazil tends to end with someone doing arithmetic
-in a WhatsApp thread at midnight. SplitPix is a group-expense ledger built
-around Pix: exact unequal shares, per-participant net balances, a minimal
-repayment plan, and each recipient's Pix key one copy away. Java 21, Spring
-Boot, PostgreSQL, hand-written SQL over `JdbcTemplate`. **It does not move
-money** — transfers happen in the payer's bank app.
+in a WhatsApp thread at midnight. SplitPix keeps the ledger instead: exact
+unequal shares, running net balances, a minimal repayment plan, and each
+recipient's Pix key one copy away. Java 21, Spring Boot, PostgreSQL,
+hand-written SQL over `JdbcTemplate`. **It does not move money.** Transfers
+happen in the payer's bank app.
 
 <p>
   <img src="docs/screenshots/group-desktop.png" alt="Group ledger, desktop" width="70%">
@@ -16,47 +16,46 @@ money** — transfers happen in the payer's bank app.
 
 ## Background
 
-Pix is Brazil's instant payment system, operated by the Central Bank since
-2020. Transfers are free for individuals, settle in seconds, and work around
-the clock; a recipient is addressed by a key — an email address, a phone
-number, or a random UUID. It has become the default way Brazilians move money
-between people, which means the *payment* half of splitting a bill is solved.
+Pix is Brazil's instant payment system, run by the Central Bank since 2020.
+Transfers are free for individuals and settle in seconds, any hour, any day.
+A recipient is addressed by a key: an email address, a phone number, or a
+random UUID. By now it is simply how Brazilians pay each other. The payment
+half of splitting a bill is solved.
 
-The *accounting* half is not. A trip or a shared apartment produces dozens of
+The accounting half is not. A trip or a shared apartment piles up dozens of
 expenses with unequal shares, and the group ends up with a web of pairwise
-debts nobody wrote down: who paid the market run, whether the R$ 420,00
-dinner was split by consumption or evenly, who already paid whom back. The
-usual tools are a spreadsheet and memory, and both fail at the same points —
-exact shares, running balances, and knowing the smallest set of transfers
-that settles everyone.
+debts nobody wrote down. Who covered the market run? Was the R$ 420,00 dinner
+split evenly or by consumption? The usual tool is a spreadsheet, or memory,
+and both give out at the same point: nobody can name the exact transfer that
+settles everyone up.
 
-SplitPix owns exactly that half. A group records each expense with exact
-per-person shares; the service derives every member's net balance, compresses
-the debt web into at most n−1 suggested transfers, and shows each debtor the
-recipient's key and the exact amount. Completed payments are recorded, so the
-plan shrinks as people pay. Pix keys are treated as personal data: CPF keys
-(Brazil's national ID doubles as a key type) are deliberately unsupported,
-since every group member can see stored keys
+That half is what SplitPix owns. A group records each expense with exact
+per-person shares; the service derives every member's balance and boils the
+debt web down to at most n−1 suggested transfers, each with the recipient's
+key and the exact amount attached. Completed payments get recorded, so the
+plan shrinks as people pay. One deliberate omission: CPF keys. Brazil's
+national ID doubles as a Pix key type, and everyone in a group can see stored
+keys, so that type simply does not exist here
 ([ADR 0004](docs/adr/0004-no-cpf-pix-keys.md)).
 
 ## How it works
 
-The ledger is append-only and balances are never stored. Every read derives
-them with a single four-leg `UNION ALL` aggregate (expenses paid, shares
-assigned, settlements sent, settlements received), which makes "balances sum
-to zero" a property of the query rather than an invariant the application
-must maintain. Every accounting write runs inside one transaction that first
-takes `SELECT ... FOR UPDATE` on the group row, so validation and insert are
-atomic with respect to every other write in that group; this one lock is what
-rules out concurrent over-settlement, and `READ COMMITTED` suffices beneath
-it.
+The ledger is append-only. Balances are never stored anywhere; every read
+derives them on the spot with a single four-leg `UNION ALL` aggregate over
+expenses paid, shares assigned, settlements sent and settlements received.
+"Balances sum to zero" is a property of that query. No application code has
+to keep it true.
 
-Writes are idempotent: keys are unique per `(group, key)` and each row stores
-a SHA-256 of the normalized request, so a same-content retry replays with a
-byte-identical body and a changed-content retry returns 409 instead of
-silently discarding the change. Composite foreign keys on
-`(group_id, participant_id)` make cross-group references unrepresentable even
-if the service layer is bypassed. Rationale and rejected alternatives:
+Writes serialize per group. Every accounting write begins with
+`SELECT ... FOR UPDATE` on the group row, inside the same transaction that
+validates and inserts, which is why two concurrent settlements can never
+jointly overpay a debt. `READ COMMITTED` is enough underneath that lock.
+Retries are safe to send twice: idempotency keys are unique per
+`(group, key)` and each row stores a SHA-256 of the normalized request, so a
+same-content retry replays with a byte-identical body while a changed-content
+retry gets a 409. And composite foreign keys on `(group_id, participant_id)`
+mean a row physically cannot point at a participant from another group, even
+when the service layer is bypassed. Rationale and rejected alternatives:
 [docs/design.md](docs/design.md) and [docs/adr/](docs/adr/).
 
 ## Run it
@@ -92,21 +91,21 @@ Full API, error codes and curl examples: [docs/api.md](docs/api.md).
 ## The hardest problem
 
 The subtlest defect was a concurrency test that proved nothing. Two
-settlement threads released by a barrier appeared to demonstrate the group
-lock, and kept passing after the lock was deleted: in a warm JVM the first
-transaction commits before the second ever reaches the database. The
-replacement (`GroupLockTest`) holds the lock open inside a paused transaction
-and asserts that a second request is still blocked, alongside a two-thread
-race in which each settlement is valid alone but the pair jointly over-pays.
-Deleting the lock now fails the suite deterministically.
+settlement threads released by a barrier looked like proof that the group
+lock worked. Then the lock was deleted, and the test kept passing: in a warm
+JVM the first transaction commits before the second ever reaches the
+database. The replacement (`GroupLockTest`) holds the lock open inside a
+paused transaction and checks that a second request is still stuck waiting.
+A companion race runs two settlements that are each valid alone but overpay
+together. Delete the lock now and the suite fails, every run.
 
 ## Limitations
 
-- A group is its invite link. Anyone holding the link reads and writes
+- A group is its invite link. Anyone holding it can read and write
   everything, stored Pix keys included. No accounts in v1.
-- Marking a payment complete is a human assertion; nothing verifies the
-  transfer happened.
-- The ledger is append-only: amounts are corrected with compensating entries,
-  and a mistyped Pix key cannot be edited after the fact.
+- Marking a payment complete is a claim, not a verification. SplitPix has no
+  way to know whether money actually moved.
+- Append-only means append-only: amounts get corrected with compensating
+  entries, and a mistyped Pix key stays wrong.
 
 MIT license.
