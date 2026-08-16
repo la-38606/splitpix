@@ -33,7 +33,10 @@ class ActivityApiTest extends ApiTestSupport {
 				.andExpect(status().isOk())
 				.andExpect(content().contentType(MediaType.APPLICATION_JSON))
 				.andExpect(jsonPath("$.groupId").value(groupId))
+				.andExpect(jsonPath("$.ledgerRevision").value(2))
 				.andExpect(jsonPath("$.items.length()").value(2))
+				.andExpect(jsonPath("$.items[0].sequence").value(1))
+				.andExpect(jsonPath("$.items[1].sequence").value(2))
 				.andExpect(jsonPath("$.items[0].type").value("EXPENSE"))
 				.andExpect(jsonPath("$.items[0].description").value("Jantar"))
 				.andExpect(jsonPath("$.items[0].payerParticipantId").value(luizId))
@@ -81,6 +84,7 @@ class ActivityApiTest extends ApiTestSupport {
 		JsonNode group = createGroup();
 		getActivity(group.get("groupId").asText(), group.get("inviteToken").asText())
 				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.ledgerRevision").value(0))
 				.andExpect(jsonPath("$.items.length()").value(0));
 	}
 

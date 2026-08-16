@@ -20,10 +20,14 @@ public class ActivityController {
 
 	@GetMapping
 	public ActivityResponse get(@PathVariable UUID groupId, @RequestParam String token) {
-		return new ActivityResponse(groupId, activityService.getActivity(groupId, token));
+		List<ActivityItem> items = activityService.getActivity(groupId, token);
+		// The list is the complete ledger, so the revision is simply the last
+		// sequence number — no second query that could see a different state.
+		long revision = items.isEmpty() ? 0 : items.getLast().sequence();
+		return new ActivityResponse(groupId, revision, items);
 	}
 
-	public record ActivityResponse(UUID groupId, List<ActivityItem> items) {
+	public record ActivityResponse(UUID groupId, long ledgerRevision, List<ActivityItem> items) {
 	}
 
 }

@@ -11,6 +11,7 @@ import org.springframework.stereotype.Repository;
 public class ActivityRepository {
 
 	private static final RowMapper<ActivityItem> MAPPER = (rs, rowNum) -> new ActivityItem(
+			rs.getLong("sequence"),
 			rs.getString("type"),
 			rs.getObject("id", UUID.class),
 			rs.getString("description"),
@@ -25,9 +26,16 @@ public class ActivityRepository {
 		this.jdbcTemplate = jdbcTemplate;
 	}
 
+	/**
+	 * The ledger in serialization order. Writes hold the group lock and
+	 * timestamp with clock_timestamp(), so (created_at, id) reproduces the
+	 * order entries actually committed in; ROW_NUMBER over that order gives
+	 * each entry a stable sequence number.
+	 */
 	public List<ActivityItem> findByGroupId(UUID groupId) {
 		return jdbcTemplate.query("""
-				SELECT type, id, description, payer_participant_id, recipient_participant_id,
+				SELECT ROW_NUMBER() OVER (ORDER BY created_at, id) AS sequence,
+				       type, id, description, payer_participant_id, recipient_participant_id,
 				       amount_cents, created_at
 				FROM (
 				    SELECT 'EXPENSE' AS type, e.id, e.description,
@@ -45,6 +53,20 @@ public class ActivityRepository {
 				) history
 				ORDER BY created_at, id
 				""", MAPPER, groupId, groupId);
+	}
+
+	/**
+	 * How many entries the ledger holds: expenses plus completed settlements.
+	 * Append-only, so this only grows — equal revisions mean identical
+	 * accounting state, and a plan stamped with a revision is stale once the
+	 * group's revision moves past it.
+	 */
+	public long ledgerRevision(UUID groupId) {
+		Long revision = jdbcTemplate.queryForObject("""
+				SELECT (SELECT COUNT(*) FROM expenses WHERE group_id = ?)
+				     + (SELECT COUNT(*) FROM settlements WHERE group_id = ? AND status = 'COMPLETED')
+				""", Long.class, groupId, groupId);
+		return revision == null ? 0 : revision;
 	}
 
 }

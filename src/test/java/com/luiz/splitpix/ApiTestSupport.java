@@ -98,8 +98,30 @@ public abstract class ApiTestSupport {
 				""".formatted(payerId, recipientId, amountCents);
 	}
 
-	protected ResultActions getSuggestedPayments(String groupId, String token) throws Exception {
-		return mockMvc.perform(get("/api/v1/groups/" + groupId + "/suggested-payments").param("token", token));
+	protected ResultActions getSettlementPlan(String groupId, String token, String strategy) throws Exception {
+		var request = get("/api/v1/groups/" + groupId + "/settlement-plan").param("token", token);
+		if (strategy != null) {
+			request = request.param("strategy", strategy);
+		}
+		return mockMvc.perform(request);
+	}
+
+	protected ResultActions postSettlementPlan(String groupId, String token, String json) throws Exception {
+		return mockMvc.perform(post("/api/v1/groups/" + groupId + "/settlement-plan")
+				.param("token", token)
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(json));
+	}
+
+	protected ResultActions compareSettlementPlans(String groupId, String token) throws Exception {
+		return mockMvc.perform(get("/api/v1/groups/" + groupId + "/settlement-plan/compare")
+				.param("token", token));
+	}
+
+	protected ResultActions getBalanceExplanation(String groupId, String participantId, String token)
+			throws Exception {
+		return mockMvc.perform(get("/api/v1/groups/" + groupId + "/participants/" + participantId
+				+ "/balance-explanation").param("token", token));
 	}
 
 	protected ResultActions getActivity(String groupId, String token) throws Exception {
