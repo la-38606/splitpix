@@ -3,12 +3,15 @@
 [![CI](https://github.com/la-38606/splitpix/actions/workflows/ci.yml/badge.svg)](https://github.com/la-38606/splitpix/actions/workflows/ci.yml)
 
 SplitPix is a shared-expense ledger that treats settling up as an
-optimization problem. Balances derive from an append-only ledger, financial
-invariants hold under concurrent writes and retries, and the repayment plan
-is a choice: fewest payments, fewest new payment relationships, or a fast
-heuristic, each labeled with what it guarantees. Java 21, Spring Boot,
-PostgreSQL, hand-written SQL. **It does not move money.** Plans carry each
-recipient's Pix key; transfers happen in the payer's bank app.
+optimization problem. Underneath, balances derive from an append-only ledger
+and every financial invariant survives concurrent writes and retries. On
+top sits the part that makes the project worth reading: several different
+repayment plans can settle the same group, and SplitPix computes them under
+selectable objectives (fewest transfers, or fewest new payment
+relationships, or a fast heuristic), labeling each with what it does and
+does not guarantee. Java 21, Spring Boot, PostgreSQL, hand-written SQL.
+**It does not move money.** Plans carry each recipient's Pix key; transfers
+happen in the payer's bank app.
 
 <p>
   <img src="docs/screenshots/group-desktop.png" alt="Group ledger, desktop" width="70%">
@@ -17,14 +20,15 @@ recipient's Pix key; transfers happen in the payer's bank app.
 
 ## Why build another expense splitter?
 
-Splitting one bill is arithmetic. A shared ledger is harder: it has to stay
-correct through retried requests, concurrent writes, and corrections, which
-is a small distributed-systems problem wearing a consumer UI. Then comes a
-question most tools never surface. Once balances exist, who should pay whom?
+Splitting one bill is arithmetic. Keeping a month of shared expenses correct
+is a small distributed-systems problem wearing a consumer UI: requests get
+retried, two people hit save at the same moment, and last week's typo needs
+a correction that doesn't rewrite history. Solve all of that and a second
+problem is still standing. Who should actually pay whom?
 
-Many different transfer graphs settle the same balances exactly. Take five
-people after a trip, with net positions +500, +400, −400, −300, −200 (the
-`--tecnico` act of the demo builds this group):
+The balances alone don't decide it. Take five people after a trip, with net
+positions +500, +400, −400, −300, −200 (the `--tecnico` act of the demo
+builds this exact group):
 
 | Strategy | Payments | New payment pairs | Guarantee |
 |---|---|---|---|
@@ -32,14 +36,17 @@ people after a trip, with net positions +500, +400, −400, −300, −200 (the
 | Fewest payments | 3 | 0 | provably minimal |
 | Prefer existing relationships | 3 | 0 | provably minimal for that objective |
 
-The greedy plan routes money between people who never shared an expense.
-Three transfers settle the same group along the lines the expenses already
-drew. Neither answer is more correct than the other in general; they optimize
-different things, and sometimes the relationship-aware plan spends an extra
-payment to avoid one awkward new pair. SplitPix computes the options, proves
-what can be proven, and lets the group decide. That decision is the project's
-center of gravity; the Pix branding is context (in Brazil the transfer itself
-is instant and free, so accounting is the only remaining friction).
+All three plans zero every balance to the centavo. What differs is the shape
+of the settlement graph. The greedy plan asks Elisa to pay Bruno, two people
+who never shared an expense; three transfers settle the same group along the
+lines the expenses already drew. The objectives can genuinely conflict, too:
+on other balance vectors the relationship-aware plan spends an extra payment
+to avoid creating a single awkward pair, and whether that trade is worth it
+depends on the group, so SplitPix puts the labeled options in front of the
+people involved instead of hardcoding a winner. That choice is the project's center of
+gravity. Pix is context rather than the point: in Brazil the transfer itself
+is instant and free, which leaves the accounting as the only friction worth
+building software for.
 
 ## How it works
 
@@ -56,26 +63,28 @@ request hash make retries safe: same content replays byte-identically, a
 back-button edit surfaces as a 409. Composite foreign keys mean a row
 physically cannot reference a participant from another group.
 
-The optimizer is a separate pure layer. The exact strategies share one
-memoized search over basic plans, cross-checked in tests against a
-closed-form bound and against exhaustive enumeration, and every plan passes a
-production invariant checker before it leaves the service (applying it must
-zero every balance to the centavo). Exact search is refused past ten nonzero
-balances rather than silently degraded; the thresholds are measured, not
-guessed. Constraints are first-class: forbid a payer→recipient pair, cap the
-size of any single transfer, and get 409 `NO_FEASIBLE_SETTLEMENT_PLAN` when
-no plan satisfies them. Algorithms, proofs and worked examples:
+The optimizer is a separate pure layer. Both exact strategies run one
+memoized search over basic plans; tests cross-check it against a closed-form
+bound and against exhaustive enumeration, and a production invariant checker
+re-applies every plan before it leaves the service. Past ten nonzero
+balances (eight when a per-transfer cap is set) the exact strategies answer
+400 instead of quietly handing back a heuristic — both limits came out of
+benchmarking, with a deterministic search budget behind them. Requests can
+also carry constraints: forbid a payer→recipient pair, or cap the size of
+any single transfer, and when nothing satisfies them the answer is a 409
+`NO_FEASIBLE_SETTLEMENT_PLAN`. Algorithms, proofs and worked examples:
 [docs/design.md §10](docs/design.md).
 
 ## Explainable, on demand
 
 The interface stays plain: balances, suggested payments, Pix keys, history.
-Every deeper claim is one click away and nothing technical is forced on
+Every deeper claim sits one click away, and nothing technical is forced on
 anyone. "Por quê?" beside a balance opens a statement of the exact ledger
-entries behind it, and the service verifies at runtime that the entries sum
-to the balance; a statement that does not reconcile is a 500, not a display.
-"Por que este plano?" names the strategy and its guarantee. A comparison page
-shows all strategies side by side with an advanced form for constraints:
+entries behind it; the service sums those entries at request time and
+refuses to serve a statement that fails to reconcile with the balance
+aggregate. "Por que este plano?" names the strategy in use and its
+guarantee. A comparison page shows all strategies side by side, with an
+advanced form for constraints:
 
 <img src="docs/screenshots/planos-desktop.png" alt="Strategy comparison" width="70%">
 
@@ -125,7 +134,8 @@ stored keys, so that key type deliberately does not exist here —
   everything, stored Pix keys included. No accounts in v1.
 - Append-only means append-only: amounts get corrected with compensating
   entries, and a mistyped Pix key stays wrong.
-- Exact optimization stops at ten nonzero balances (eight with a cap); larger
-  groups get the greedy strategy, clearly labeled as such.
+- Exact optimization stops at ten nonzero balances (eight with a cap). Larger
+  groups fall back to the greedy plan by default, and get a 400 if they ask
+  for an exact strategy outright.
 
 MIT license.
