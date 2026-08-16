@@ -31,10 +31,9 @@ public class BalanceRepository {
 			    FROM expenses
 			    WHERE group_id = ?
 			    UNION ALL
-			    SELECT es.participant_id, -es.amount_cents
-			    FROM expense_shares es
-			    JOIN expenses e ON e.id = es.expense_id
-			    WHERE e.group_id = ?
+			    SELECT participant_id, -amount_cents
+			    FROM expense_shares
+			    WHERE group_id = ?
 			    UNION ALL
 			    SELECT payer_participant_id, amount_cents
 			    FROM settlements
