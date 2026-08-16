@@ -6,8 +6,9 @@
 #   2. seeds the deterministic demo group (scripts/seed-demo.sh);
 #   3. runs the Playwright walkthrough (e2e/demo.spec.ts) with video on;
 #   4. converts the recording to H.264 (ffmpeg-static, an e2e dev
-#      dependency) and leaves it at docs/demo/splitpix-demo.mp4 —
-#      the format GitHub's file viewer plays inline.
+#      dependency), lays the synthesized pad from scripts/demo-music.py
+#      under it, and leaves docs/demo/splitpix-demo.mp4 — the format
+#      GitHub's file viewer plays inline.
 #
 # Needs Java 21 + Docker (for the app) and Node (for Playwright). The first
 # run downloads the Playwright Chromium build. Only processes started by
@@ -58,8 +59,20 @@ VIDEO="$(find test-results -name '*.webm' -print -quit)"
 FFMPEG="$(node -p "require('ffmpeg-static')")"
 cd ..
 mkdir -p docs/demo
-"$FFMPEG" -y -loglevel error -i "e2e/$VIDEO" \
-	-c:v libx264 -pix_fmt yuv420p -crf 23 -preset slow -movflags +faststart \
+
+# The wall-clock length drives the music synthesis, so the pad fades out
+# exactly where the video ends. (ffmpeg -i without an output exits nonzero
+# by design; the || true keeps pipefail from treating the probe as a crash.)
+DURATION="$({ "$FFMPEG" -i "e2e/$VIDEO" 2>&1 || true; } \
+	| sed -n 's/.*Duration: \([0-9]*\):\([0-9]*\):\([0-9.]*\).*/\1 \2 \3/p' \
+	| awk '{ printf "%.2f", $1 * 3600 + $2 * 60 + $3 }')"
+[ -n "$DURATION" ] || { echo "erro: duração do vídeo não detectada" >&2; exit 1; }
+python3 scripts/demo-music.py "$DURATION" /tmp/splitpix-demo-pad.wav
+
+"$FFMPEG" -y -loglevel error -i "e2e/$VIDEO" -i /tmp/splitpix-demo-pad.wav \
+	-map 0:v -map 1:a -c:v libx264 -pix_fmt yuv420p -crf 23 -preset slow \
+	-c:a aac -b:a 128k -shortest -movflags +faststart \
 	docs/demo/splitpix-demo.mp4
+rm -f /tmp/splitpix-demo-pad.wav
 
 ls -la docs/demo/
