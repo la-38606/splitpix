@@ -21,7 +21,7 @@ via `@Transactional` on service methods; locking via an explicit
   anyway; the persistence context adds failure modes (lazy init, detached
   entities) with no payoff at five tables.
 - **jOOQ.** Closest fit philosophically, but adds code generation and a
-  dependency for what fifteen hand-written statements cover.
+  dependency for what fourteen hand-written statements cover.
 
 ## Consequences
 

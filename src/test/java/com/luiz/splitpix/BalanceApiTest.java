@@ -118,7 +118,7 @@ class BalanceApiTest extends ApiTestSupport {
 	@Test
 	void completedSettlements_moveBalancesTowardZero() throws Exception {
 		// The settlement legs of the balance query, exercised by direct insert
-		// (the settlement endpoint arrives with Day 3).
+		// so they stay pinned independently of the settlement endpoint.
 		TestGroup group = groupOfFive();
 		Map<String, String> ids = group.idsByName();
 

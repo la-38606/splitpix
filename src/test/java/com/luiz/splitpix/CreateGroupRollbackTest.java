@@ -12,7 +12,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 
 /**
  * Invariant 7: a failed transaction leaves no partial state. Create-group is
- * Day 1's multi-table write — if the creator insert fails, no group row
+ * the group-plus-creator multi-table write — if the creator insert fails, no group row
  * may survive.
  */
 class CreateGroupRollbackTest extends ApiTestSupport {

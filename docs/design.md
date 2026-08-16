@@ -270,9 +270,12 @@ splitpix/
 │   ├── application.properties       datasource, Jackson limits, SQL init
 │   ├── templates/                   Thymeleaf: home, group, erro
 │   └── static/                      splitpix.css, copiar.js
-├── src/test/java/com/luiz/splitpix/  mirrors main; see §7.4
+├── src/test/java/com/luiz/splitpix/  one flat package plus web/; see §7.4
 ├── demo.sh                          end-to-end walk-through against a running instance
-└── docs/design.md                   this document
+└── docs/
+    ├── design.md                    this document
+    ├── adr/                         one record per load-bearing decision
+    └── screenshots/                 real captures embedded in the README
 ```
 
 **Placement rule for new code.** Code that serves one domain concept goes in that concept's package, named `<Concept>Controller|Service|Repository` or a record for its request/response/result. Code used by two or more feature packages goes in `common` and must not depend on any feature package. Code that exists only to render HTML goes in `web`. A new domain concept gets a new package rather than an addition to an existing one.
@@ -289,7 +292,7 @@ splitpix/
 
 `Group` — a record mirroring the `groups` row: id, name, invite token, creation instant. Constructed only by `GroupRepository`'s mapper. Never mutated; a group's name and token are fixed at creation.
 
-`GroupService` — owns group creation and, critically, `requireGroup(groupId, token)`, the single access check every group-scoped operation calls. It exists as one method so the token comparison has exactly one implementation. `create` is `@Transactional` because it writes two tables (group and creator participant) that must appear together (I7). `getView` returns group plus participants in one read-only transaction so the page and API see one snapshot.
+`GroupService` — owns group creation and, critically, `requireGroup(groupId, token)`, the single access check every group-scoped operation calls. It exists as one method so the token comparison has exactly one implementation. `create` is `@Transactional` because it writes two tables (group and creator participant) that must appear together (I7). `getView` returns group plus participants in one read-only transaction at `REPEATABLE_READ` — it runs two statements, and under the default `READ COMMITTED` each would read its own snapshot.
 
 `GroupRepository` — SQL for groups, plus `lockById`, the concurrency primitive of §4.2. `lockById` throws `NotFoundException` when the row is absent rather than returning silently, because a lock that no-ops is worse than one that fails.
 
@@ -331,7 +334,7 @@ splitpix/
 
 ### 6.6 `web`
 
-`GroupPageController` — one controller for all pages; each action is a POST that redirects (§4.5). `GroupPage` — a record assembling everything one render needs, so the template performs no lookups. `InviteCookie` — the token-to-cookie exchange of §4.7. `PageFormats` — a Spring bean (referenced as `@pageFormats` in templates) formatting centavos and masking Pix keys.
+`GroupPageController` — one controller for all pages; each action is a POST that redirects (§4.5). `GroupPage` — a record assembling everything one render needs, so the template performs no lookups. `InviteCookie` — the token-to-cookie exchange of §4.7. `PageFormats` — a Spring bean (referenced as `@pageFormats` in templates) formatting centavos and masking Pix keys. `MoneyInput` — the strict parser from typed reais to centavos; ambiguous forms (mixed separators, zero-led grouping, three decimals) are rejected, never reinterpreted.
 
 ### 6.7 Trivial types
 
