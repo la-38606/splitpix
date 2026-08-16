@@ -3,6 +3,7 @@ package com.luiz.splitpix.web;
 import com.luiz.splitpix.activity.ActivityService;
 import com.luiz.splitpix.balance.BalanceService;
 import com.luiz.splitpix.balance.ParticipantBalance;
+import com.luiz.splitpix.common.BadRequestException;
 import com.luiz.splitpix.expense.CreateExpenseRequest;
 import com.luiz.splitpix.expense.ExpenseService;
 import com.luiz.splitpix.group.CreateGroupRequest;
@@ -69,7 +70,7 @@ public class GroupPageController {
 			@RequestParam(required = false) String pixKeyType, @RequestParam(required = false) String pixKeyValue,
 			HttpServletRequest request, HttpServletResponse response) {
 		CreateGroupResult result = groupService.create(new CreateGroupRequest(
-				groupName, creatorName, parseKeyType(pixKeyType, pixKeyValue), emptyToNull(pixKeyValue)));
+				groupName, creatorName, parseKeyType(pixKeyType), emptyToNull(pixKeyValue)));
 		InviteCookie.set(request, response, result.groupId(), result.inviteToken());
 		return "redirect:/g/" + result.groupId();
 	}
@@ -97,7 +98,7 @@ public class GroupPageController {
 			@RequestParam(required = false) String pixKeyType, @RequestParam(required = false) String pixKeyValue,
 			HttpServletRequest request, RedirectAttributes redirect) {
 		participantService.add(groupId, InviteCookie.require(request), new AddParticipantRequest(
-				displayName, parseKeyType(pixKeyType, pixKeyValue), emptyToNull(pixKeyValue)));
+				displayName, parseKeyType(pixKeyType), emptyToNull(pixKeyValue)));
 		redirect.addFlashAttribute("aviso", "participante.adicionado");
 		return "redirect:/g/" + groupId;
 	}
@@ -162,9 +163,20 @@ public class GroupPageController {
 		return (path > 0 ? base.substring(0, path) : base) + "/g/" + groupId + "?token=" + token;
 	}
 
-	private static PixKeyType parseKeyType(String type, String value) {
-		return type == null || type.isBlank() || value == null || value.isBlank()
-				? null : PixKeyType.valueOf(type);
+	/**
+	 * Only an absent type is null; a type with a blank value passes through so
+	 * the service rejects the half-filled pair exactly as the API does.
+	 */
+	private static PixKeyType parseKeyType(String type) {
+		if (type == null || type.isBlank()) {
+			return null;
+		}
+		try {
+			return PixKeyType.valueOf(type);
+		}
+		catch (IllegalArgumentException e) {
+			throw new BadRequestException("VALIDATION_ERROR");
+		}
 	}
 
 	/** A malformed id in a form field is the client's mistake, not a server failure. */
@@ -173,7 +185,7 @@ public class GroupPageController {
 			return UUID.fromString(value);
 		}
 		catch (IllegalArgumentException e) {
-			throw new com.luiz.splitpix.common.BadRequestException("VALIDATION_ERROR");
+			throw new BadRequestException("VALIDATION_ERROR");
 		}
 	}
 

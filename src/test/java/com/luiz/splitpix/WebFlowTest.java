@@ -209,6 +209,37 @@ class WebFlowTest extends ApiTestSupport {
 	}
 
 	@Test
+	void pixTypeWithoutValue_onTheForm_isAnErrorPage_notASilentDrop() throws Exception {
+		// The page tier must enforce the same pair rule as the API; silently
+		// adding the participant keyless would be data loss with a success flash.
+		Session session = createGroupViaForm();
+		mockMvc.perform(post("/g/" + session.groupId() + "/participantes")
+				.cookie(session.cookie())
+				.param("displayName", "Ana")
+				.param("pixKeyType", "EMAIL")
+				.param("pixKeyValue", ""))
+				.andExpect(status().isBadRequest())
+				.andExpect(view().name("erro"))
+				.andExpect(content().string(org.hamcrest.Matchers.containsString("INVALID_PIX_KEY_PAIR")));
+
+		Integer participants = jdbcTemplate.queryForObject(
+				"SELECT COUNT(*) FROM participants WHERE group_id = ?::uuid", Integer.class, session.groupId());
+		assertThat(participants).isEqualTo(1);
+	}
+
+	@Test
+	void tamperedPixKeyTypeSelect_isA400_notA500() throws Exception {
+		Session session = createGroupViaForm();
+		mockMvc.perform(post("/g/" + session.groupId() + "/participantes")
+				.cookie(session.cookie())
+				.param("displayName", "Ana")
+				.param("pixKeyType", "CPF")
+				.param("pixKeyValue", "12345678900"))
+				.andExpect(status().isBadRequest())
+				.andExpect(view().name("erro"));
+	}
+
+	@Test
 	void unknownGroup_withACookie_isA404Page() throws Exception {
 		Session session = createGroupViaForm();
 		mockMvc.perform(get("/g/" + UUID.randomUUID()).cookie(session.cookie()))
