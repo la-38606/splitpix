@@ -1,5 +1,7 @@
 # SplitPix
 
+[![CI](https://github.com/la-38606/splitpix/actions/workflows/ci.yml/badge.svg)](https://github.com/la-38606/splitpix/actions/workflows/ci.yml)
+
 Splitting group expenses in Brazil usually ends in a WhatsApp thread full of
 screenshots and someone doing arithmetic at midnight. I built SplitPix to fix
 the part that is actually hard: keeping the accounting exact, concurrent-safe,
@@ -35,13 +37,23 @@ http://localhost:8080.
 Tests:
 
 ```bash
-./mvnw verify                   # 166 tests against real PostgreSQL
+./mvnw verify                   # 170 tests
 ```
 
 One sharp edge: the schema is applied with `CREATE TABLE IF NOT EXISTS`, so it
 only initializes an empty database. After pulling a schema change, recreate
 the compose volume with `docker compose down -v`. Tests are unaffected (fresh
 database every run).
+
+## What it looks like
+
+The group ledger: balances in the ruled band, suggested payments with the
+recipient's key one copy away, and the append-only history below.
+
+<p>
+  <img src="docs/screenshots/group-desktop.png" alt="Group ledger, desktop" width="70%">
+  <img src="docs/screenshots/group-mobile.png" alt="Group ledger, mobile" width="24%">
+</p>
 
 ## What the demo shows
 
@@ -224,8 +236,10 @@ Endpoints: `POST /groups`, `GET /groups/{id}`, `POST /groups/{id}/participants`,
 
 ## Testing
 
-166 tests, every one against real PostgreSQL through Testcontainers, run by
-GitHub Actions on every push to main and every pull request. H2 would have
+170 tests, run by GitHub Actions on every push to main and every pull
+request. The 23 pure-logic tests (simplifier, money parser, hashing,
+formatting, message bundle) need no container; the other 147 all run against
+real PostgreSQL through Testcontainers. H2 would have
 been faster and would have proven nothing: the system leans on `FOR UPDATE`
 blocking, deferrable foreign keys, CHECK constraints and PostgreSQL's
 aggregate typing, none of which an in-memory imitation reproduces.
