@@ -239,6 +239,32 @@ class SettlementApiTest extends ApiTestSupport {
 	}
 
 	@Test
+	void mistakenSettlement_isCorrectedByACompensatingExpense() throws Exception {
+		// Ana records paying Luiz 5000 by mistake (nothing was transferred).
+		postSettlement(groupId, token, "s-mistake", settlementJson(anaId, luizId, 5000))
+				.andExpect(status().isCreated());
+
+		// The ledger is append-only: an opposite settlement is NOT the fix —
+		// Luiz owes nothing, so invariants 4/5 reject it.
+		postSettlement(groupId, token, "s-wrong-fix", settlementJson(luizId, anaId, 5000))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.code").value("SETTLEMENT_EXCEEDS_DEBT"));
+
+		// The working correction: a compensating expense paid by the wrongly
+		// recorded recipient, fully assigned to the wrongly recorded payer.
+		postExpense(groupId, token, "e-estorno", """
+				{"description": "Estorno", "paidByParticipantId": "%s", "totalCents": 5000,
+				 "shares": [{"participantId": "%s", "amountCents": 5000}]}
+				""".formatted(luizId, anaId))
+				.andExpect(status().isCreated());
+
+		// Balances are back to the pre-mistake state: Ana owes her 5000 again.
+		Map<String, Long> balances = balances();
+		assertThat(balances.get(anaId)).isEqualTo(-5000L);
+		assertThat(balances.get(luizId)).isEqualTo(5000L);
+	}
+
+	@Test
 	void samePayerAndRecipient_returns400() throws Exception {
 		postSettlement(groupId, token, "s-self", settlementJson(anaId, anaId, 1000))
 				.andExpect(status().isBadRequest())
