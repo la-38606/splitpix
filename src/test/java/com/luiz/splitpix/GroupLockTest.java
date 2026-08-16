@@ -28,7 +28,7 @@ import tools.jackson.databind.JsonNode;
  * one asserts the lock is taken, the other blocks the lock holder and proves
  * the second request genuinely waits.
  */
-class ExpenseLockTest extends ApiTestSupport {
+class GroupLockTest extends ApiTestSupport {
 
 	@MockitoSpyBean
 	private GroupRepository groupRepository;
@@ -41,6 +41,27 @@ class ExpenseLockTest extends ApiTestSupport {
 				{"description": "Jantar", "paidByParticipantId": "%s", "totalCents": 100,
 				 "shares": [{"participantId": "%s", "amountCents": 100}]}
 				""".formatted(participantId, participantId);
+	}
+
+	@Test
+	void settlementCompletion_takesTheGroupLock() throws Exception {
+		JsonNode group = createGroup("Lock", "Luiz");
+		String groupId = group.get("groupId").asText();
+		String token = group.get("inviteToken").asText();
+		String luizId = group.get("creatorParticipantId").asText();
+		String anaId = addParticipant(groupId, token, "Ana").get("participantId").asText();
+
+		postExpense(groupId, token, "lock-s-setup", """
+				{"description": "Jantar", "paidByParticipantId": "%s", "totalCents": 100,
+				 "shares": [{"participantId": "%s", "amountCents": 100}]}
+				""".formatted(luizId, anaId))
+				.andExpect(status().isCreated());
+		org.mockito.Mockito.clearInvocations(groupRepository);
+
+		postSettlement(groupId, token, "lock-s", settlementJson(anaId, luizId, 100))
+				.andExpect(status().isCreated());
+
+		verify(groupRepository).lockById(java.util.UUID.fromString(groupId));
 	}
 
 	@Test

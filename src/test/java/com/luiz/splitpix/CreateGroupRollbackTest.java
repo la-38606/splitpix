@@ -2,7 +2,7 @@ package com.luiz.splitpix;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doAnswer;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -22,8 +22,10 @@ class CreateGroupRollbackTest extends ApiTestSupport {
 
 	@Test
 	void failedCreatorInsert_leavesNoGroupRow() throws Exception {
-		doThrow(new RuntimeException("simulated participant insert failure"))
-				.when(participantRepository).insert(any(), any(), any(), any(), any());
+		doAnswer(invocation -> {
+			invocation.callRealMethod();
+			throw new RuntimeException("simulated failure after real participant insert");
+		}).when(participantRepository).insert(any(), any(), any(), any(), any());
 
 		postJson("/api/v1/groups", """
 				{"groupName": "Atomic Group", "creatorName": "Luiz"}

@@ -3,7 +3,7 @@ package com.luiz.splitpix;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
-import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doAnswer;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -29,8 +29,10 @@ class ExpenseRollbackTest extends ApiTestSupport {
 		String token = group.get("inviteToken").asText();
 		String luizId = group.get("creatorParticipantId").asText();
 
-		doThrow(new RuntimeException("simulated share insert failure"))
-				.when(expenseRepository).insertShares(any(), any(), anyList());
+		doAnswer(invocation -> {
+			invocation.callRealMethod();
+			throw new RuntimeException("simulated failure after real share insert");
+		}).when(expenseRepository).insertShares(any(), any(), anyList());
 
 		postExpense(groupId, token, "rollback-1", """
 				{
