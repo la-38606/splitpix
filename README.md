@@ -108,27 +108,24 @@ independent brute-force oracles. Full API with curl examples:
 [docs/adr/](docs/adr/). Printable design document:
 [docs/splitpix-design-doc.pdf](docs/splitpix-design-doc.pdf).
 
-## The hardest problem
-
-The subtlest defect was a concurrency test that proved nothing. Two
-settlement threads released by a barrier looked like proof that the group
-lock worked. Then the lock was deleted, and the test kept passing: in a warm
-JVM the first transaction commits before the second ever reaches the
-database. The replacement holds the lock open inside a paused transaction and
-checks that a second request is still stuck waiting; a companion race runs
-two settlements that are each valid alone but overpay together. Delete the
-lock now and the suite fails, every run. The same standard shaped the
-optimizer tests: an exact claim counts only when an independent oracle can
-falsify it.
-
 ## Scope and privacy
 
 This is a portfolio project, not a payment service. Nothing here executes or
 verifies a transfer; marking a payment complete is a claim by the person who
-made it. Everything runs on synthetic identities: no CPF is ever stored (the
-national ID doubles as a Pix key type, and everyone in a group can read
-stored keys, so that key type deliberately does not exist here —
-[ADR 0004](docs/adr/0004-no-cpf-pix-keys.md)).
+made it, and every demo runs on synthetic identities.
+
+One privacy decision deserves spelling out. Pix accepts the CPF, Brazil's
+national taxpayer number, as a key type. The CPF is a lifelong identifier
+tied to bank accounts, credit history and tax filings, and it qualifies as
+personal data under the LGPD (Lei 13.709/2018, Brazil's data protection
+law), so whoever stores it takes on controller obligations around purpose,
+retention and disclosure. A system whose entire access model is a shareable
+invite link, where everyone in the group can read every stored key, has no
+business holding a national ID. The CPF key type therefore does not exist
+here, and the format validation even catches a CPF smuggled in as a RANDOM
+key: an EVP key is a UUID, so bare digits never match
+([ADR 0004](docs/adr/0004-no-cpf-pix-keys.md)). Email and phone keys are
+accepted; every value in the demos is fictional.
 
 ## Limitations
 
