@@ -119,7 +119,7 @@ Needs Java 21 and Docker (plus `jq` or `python3` for the demo).
 ./demo.sh --tecnico           # adds strategy comparison, constraints, infeasibility
 ```
 
-The browser UI is at http://localhost:8080. `./mvnw verify` runs the 203-test
+The browser UI is at http://localhost:8080. `./mvnw verify` runs the 204-test
 suite; every test that touches persistence runs against real PostgreSQL, and
 the optimizer is additionally validated by seeded property tests against two
 independent brute-force oracles. Full API with curl examples:
