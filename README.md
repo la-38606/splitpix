@@ -76,7 +76,8 @@ two concurrent settlements can never jointly overpay a debt. Idempotency
 keys plus a SHA-256 request hash make retries safe: same content replays
 byte-identically, and a back-button edit surfaces as a 409. Composite
 foreign keys mean a row physically cannot reference a participant from
-another group. All persistence is hand-written SQL.
+another group. Money is integer arithmetic end to end; floating point never
+touches an amount. All persistence is hand-written SQL.
 
 The optimizer is a separate pure layer. Both exact strategies run one
 memoized search over basic plans; seeded property tests cross-check it
